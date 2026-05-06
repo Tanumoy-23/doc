@@ -1,0 +1,209 @@
+## Helm-Based Rollback Runbook
+
+---
+
+### Pre-Rollback Procedures
+
+---
+
+#### 1. Traffic Drainage
+
+Isolate the affected service from incoming traffic to prevent further impact on end users. This involves either removing the service from the load balancer rotation or adjusting ingress-level traffic weights. If the issue is node-specific, cordon and drain the affected node to gracefully evict workloads.
+
+```bash
+# Disable canary or suspend ingress routing
+kubectl annotate ingress <ingress-name> nginx.ingress.kubernetes.io/canary="false" -n <namespace>
+
+# Cordon the affected node
+kubectl cordon <node-name>
+
+# Drain workloads from the node gracefully
+kubectl drain <node-name> --ignore-daemonsets --delete-emptydir-data
+```
+
+---
+
+#### 2. Database Backup
+
+Prior to initiating any rollback, capture a consistent point-in-time snapshot of the database to ensure data recoverability in the event of schema-level or data-level corruption introduced by the failed release.
+
+```bash
+# PostgreSQL — logical dump
+pg_dump -h <host> -U <user> -d <dbname> -F c -f backup_$(date +%F).dump
+
+# MySQL — logical dump
+mysqldump -h <host> -u <user> -p<password> <dbname> > backup_$(date +%F).sql
+
+# RDS — automated snapshot via AWS CLI
+aws rds create-db-snapshot \
+  --db-instance-identifier <db-id> \
+  --db-snapshot-identifier snap-$(date +%F)
+```
+
+---
+
+#### 3. EFS / NFS Filesystem Backup
+
+Trigger a manual backup of the EFS filesystem via AWS Backup to capture the current state of all persistent volumes prior to rollback. This serves as the recovery baseline for NFS-backed PersistentVolumes.
+
+```bash
+# Trigger on-demand AWS Backup job for EFS
+aws backup start-backup-job \
+  --backup-vault-name <vault-name> \
+  --resource-arn arn:aws:elasticfilesystem:<region>:<account-id>:file-system/<fs-id> \
+  --iam-role-arn arn:aws:iam::<account-id>:role/AWSBackupRole
+
+# Alternative — sync EFS mount to S3 for quick archival
+aws s3 sync /mnt/efs s3://<bucket>/efs-backup-$(date +%F)/
+```
+
+---
+
+#### 4. Helm Values and Kubernetes Object Backup
+
+Export the current Helm release values along with critical Kubernetes objects — Secrets, ConfigMaps — to preserve the runtime configuration state before initiating rollback.
+
+```bash
+# Export current Helm release values
+helm get values <release-name> -n <namespace> > values-backup-$(date +%F).yaml
+
+# Export Secrets
+kubectl get secret -n <namespace> -o yaml > secrets-backup-$(date +%F).yaml
+
+# Export ConfigMaps
+kubectl get cm -n <namespace> -o yaml > cm-backup-$(date +%F).yaml
+```
+
+---
+
+### Rollback Execution
+
+---
+
+#### 5. Helm Rollback
+
+Identify the target revision from the Helm release history and initiate a rollback. Helm will re-apply the manifests from the specified revision, recreating all associated Kubernetes objects including Deployments, Services, PVCs, and ConfigMaps.
+
+```bash
+# Inspect release history to identify stable revision
+helm history <release-name> -n <namespace>
+
+# Rollback to immediately preceding revision
+helm rollback <release-name> -n <namespace>
+
+# Rollback to a specific revision
+helm rollback <release-name> <revision-number> -n <namespace>
+
+# Validate rollback status
+helm status <release-name> -n <namespace>
+kubectl get pods -n <namespace>
+kubectl rollout status deployment/<deployment-name> -n <namespace>
+```
+
+---
+
+#### 6. EFS Filesystem Restore (If Required)
+
+If NFS-backed data has been corrupted or inadvertently modified during the failed release, initiate a restore job via AWS Backup using the recovery point captured in Step 3. Validate mount integrity post-restore before re-enabling traffic.
+
+```bash
+# Initiate EFS restore from recovery point
+aws backup start-restore-job \
+  --recovery-point-arn <recovery-point-arn> \
+  --metadata '{"file-system-id":"<fs-id>","encrypted":"false","newFileSystem":"false"}' \
+  --iam-role-arn arn:aws:iam::<account-id>:role/AWSBackupRole
+
+# Verify EFS mount post-restore
+kubectl exec -it <pod-name> -n <namespace> -- df -h
+kubectl exec -it <pod-name> -n <namespace> -- ls /mnt/efs
+```
+
+---
+
+#### 7. Database Restore (If Required)
+
+If the failed release introduced breaking schema migrations or data corruption, restore the database from the snapshot captured in Step 2. Ensure the application configuration points to the correct database endpoint post-restore.
+
+```bash
+# PostgreSQL — restore from logical dump
+pg_restore -h <host> -U <user> -d <dbname> -F c backup_$(date +%F).dump
+
+# RDS — restore instance from snapshot
+aws rds restore-db-instance-from-db-snapshot \
+  --db-instance-identifier <new-db-instance-id> \
+  --db-snapshot-identifier snap-$(date +%F)
+
+# Update DB endpoint in Kubernetes Secret if restored to new RDS instance
+kubectl edit secret <db-secret-name> -n <namespace>
+```
+
+---
+
+#### 8. Traffic Re-enablement
+
+Once rollback has been validated and all health checks are passing, re-introduce the service into the load balancer rotation and uncordon any drained nodes.
+
+```bash
+# Uncordon the node
+kubectl uncordon <node-name>
+
+# Re-enable ingress routing
+kubectl annotate ingress <ingress-name> nginx.ingress.kubernetes.io/canary="true" -n <namespace>
+
+# Verify pod health and readiness
+kubectl get pods -n <namespace>
+kubectl describe svc <service-name> -n <namespace>
+```
+
+---
+
+### Post-Rollback Validation Checklist
+
+| Checkpoint | Command |
+|---|---|
+| All pods in Running state | `kubectl get pods -n <namespace>` |
+| No crash loops or restarts | `kubectl get pods --field-selector=status.phase!=Running -n <namespace>` |
+| EFS mount accessible | `kubectl exec -it <pod> -- df -h` |
+| DB connectivity verified | App-level health endpoint or `psql` connectivity test |
+| Helm release in deployed state | `helm status <release-name> -n <namespace>` |
+| Ingress routing restored | `curl -I https://<endpoint>` |
+
+---
+
+### Rollback Trigger Scenarios
+
+**Application & Deployment Failures**
+- Failed Helm upgrade resulting in CrashLoopBackOff or OOMKilled pods
+- Erroneous Docker image tag or corrupted container image deployed
+- Misconfigured environment variables or missing Secrets post-upgrade
+- Liveness / readiness probe failures causing continuous pod restarts
+- Resource limits misconfiguration leading to pod eviction
+
+**Data & Storage Failures**
+- EFS mount failure or NFS path unavailability post-deployment
+- Irreversible or breaking DB schema migration introduced in the release
+- PVC binding failure due to StorageClass or PV mismatch
+- Accidental data deletion or overwrite on EFS during deployment
+
+**Configuration Failures**
+- Incorrect ConfigMap or Secret applied, causing application misconfiguration
+- Ingress rule misconfiguration resulting in traffic blackhole or 502/503 errors
+- HPA / VPA misconfiguration causing uncontrolled scaling or resource exhaustion
+- RBAC policy changes breaking ServiceAccount permissions
+
+**Infrastructure Failures**
+- Node group failure or unschedulable nodes causing workload disruption
+- EFS throughput exhaustion impacting NFS read/write performance
+- RDS failover or Multi-AZ switchover not completing within SLA
+- Network Policy misconfiguration blocking inter-service communication
+
+**Backup & Restore Failures**
+- AWS Backup job completing with errors — always verify job status explicitly
+- EFS restore provisioning a new filesystem instead of performing in-place restore
+- DB restore pointing application to stale or incorrect endpoint
+- Helm rollback succeeding at the infrastructure layer while application remains on new DB schema
+
+**External Dependency Failures**
+- Third-party API contract changes causing integration failures
+- TLS certificate expiry post-deployment causing handshake failures
+- DNS propagation delays following service endpoint changes
