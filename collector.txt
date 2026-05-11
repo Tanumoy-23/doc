@@ -1,0 +1,11 @@
+3. Agent pattern
+https://opentelemetry.io/docs/collector/deploy/agent/
+Explains the agent deployment where the Collector is configured to send telemetry data to one or more backends, running alongside applications as a sidecar or DaemonSet. Includes Java and Python examples. OpenTelemetry
+
+4. Gateway pattern
+https://opentelemetry.io/docs/collector/deploy/gateway/
+Covers the gateway pattern where applications or other Collectors send telemetry signals to a single OTLP endpoint provided by one or more Collector instances running as a standalone service, such as a Kubernetes Deployment. OpenTelemetry
+
+5. Agent-to-gateway combined pattern (most relevant for you)
+https://opentelemetry.io/docs/collector/deploy/other/agent-to-gateway/
+Contains the full architecture diagram, example YAML configs for both agents and gateways, and guidance on scaling. It confirms that you can scale gateways without tail sampling using any load balancer or Kubernetes Service with round-robin distribution, and for automatic scaling in Kubernetes, you can use HPA based on CPU or memory metrics. OpenTelemetry
