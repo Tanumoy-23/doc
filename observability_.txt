@@ -25,3 +25,44 @@ Store Gateway — stateless-with-cache reader that makes cold S3 data queryable;
 Querier — stateless PromQL entry point that fans out to sidecars + store gateway, dedups, evaluates, returns; scalable.
 
 You've clearly internalized the architecture — the only real correction is remembering the sidecar reads as well as uploads, and that the compactor is doing performance work, not just shrinking storage.Opus 4.8 High
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+How Thanos do dedup. 
+
+Yes — it's based on a **designated "replica label."** That's the whole mechanism. Let me show it concretely.
+
+**Step 1 — Each Prometheus gets external labels, identical except one.** In each Prometheus config you set `external_labels`. For an HA group, every replica shares the *same* labels except for one that distinguishes them:
+
+```yaml
+# Prometheus A
+external_labels: { cluster: prod, region: us-east, replica: A }
+
+# Prometheus B
+external_labels: { cluster: prod, region: us-east, replica: B }
+
+# Prometheus C
+external_labels: { cluster: prod, region: us-east, replica: C }
+```
+
+Everything matches except `replica`. These labels get stamped onto every series and travel with the data (via the sidecar upload to S3 and through the Store API).
+
+**Step 2 — You tell Thanos which label is the replica label.**
+- On the **Querier**: `--query.replica-label=replica`
+- On the **Compactor** (if doing offline dedup): `--deduplication.replica-label=replica`
+
+**Step 3 — How the dedup actually works.** When the Querier gathers series, it **strips the replica label and groups what's left**. So:
+
+```
+{job=api, instance=x, replica=A}
+{job=api, instance=x, replica=B}   →  after dropping `replica`, both are {job=api, instance=x}
+{job=api, instance=x, replica=C}        →  recognized as 3 copies of ONE logical series
+```
+
+Then it merges them into a single series. It doesn't naively pick one — it uses a **penalty-based algorithm**: it follows one replica's samples as primary and only switches to another when the primary has a gap (since the three replicas scraped at slightly offset times and may each have small holes). The result is one continuous, gap-filled series stitched from the redundant copies.
+
+**The critical rule:** the *only* difference between duplicate series must be the **replica label**. If they differ in any *other* label, Thanos treats them as genuinely distinct series and will **not** dedup them.
+
+And that rule is exactly why the collection-layer duplication from last turn is un-fixable: those duplicates differ by `instance`/collector-pod label, **not** by the designated `replica` label. So Thanos looks at them, sees a non-replica label differing, and concludes "these are two different series" — leaving both. Thanos dedup is *specifically and only* "collapse series that are identical except for the replica label." HA Prometheus duplication fits that pattern perfectly; un-sharded scraper duplication doesn't.
+
+So in one line: **Thanos dedups by treating the configured replica label as "ignore this when deciding if two series are the same," then merging the matches with a penalty-based sample stitcher.** Get that one label right and HA dedup just works; any duplication distinguished by a *different* label is outside what dedup can touch.
