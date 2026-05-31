@@ -1,0 +1,27 @@
+1) Thanos Sidecar — right, but it has a second job you're missing.
+Yes, one sidecar container per Prometheus pod (so 3 of them), and yes, it uploads completed 2h blocks from EBS to S3. But uploading is only half its role. The sidecar also serves a Store API — it's a read endpoint. When the Querier needs recent data, it asks the sidecar, which proxies the query to its local Prometheus and returns the hot data still sitting on EBS. So the sidecar is both the uploader (EBS→S3) and the reader that exposes each Prometheus's recent data to the query layer. (It can also trigger Prometheus config reloads, but that's minor.) Without the sidecar's Store API, the Querier couldn't see your hot data at all.
+2) Thanos Compactor — right on placement, but "just reduce S3 volume" undersells it.
+Singleton, background job, operates only on S3, never EBS — all correct. But storage reduction is only one of its effects, and not even the main one:
+
+Compaction merges small blocks into big ones — this is mostly a query-performance win (the Store Gateway opens far fewer blocks per query), not primarily storage.
+Downsampling builds 5m/1h resolutions so long-range queries are fast — this actually adds a bit of storage, it doesn't reduce it. It's a query-speed feature.
+Retention deletes expired blocks — this is what reduces storage.
+Dedup (if enabled) — reduces storage.
+
+So it's better to think of it as performance + retention housekeeping, with storage reduction being just the retention + optional-dedup part. If you described it as "only shrinks S3," you'd undervalue the compaction/downsampling work that keeps historical queries fast.
+3) Thanos Store Gateway — let me answer your three questions.
+
+Is it stateful? Effectively no — S3 is the source of truth; the Store Gateway owns no data. But it keeps a local cache of block index-headers (and in-memory caches) on disk to avoid re-fetching from S3 on every query. That cache is fully reconstructible from S3, so losing it means a rebuild, not data loss. People often deploy it as a StatefulSet with a PVC for the cache, but it's "stateless with a performance cache," not stateful like Prometheus.
+Where does it sit? Its own standalone Deployment/StatefulSet in the cluster — not a sidecar, not tied to Prometheus. It sits between S3 and the Querier: reads blocks from S3, exposes a Store API (gRPC) to the Querier.
+What's it for? S3 is dumb object storage — it can't answer PromQL. The Store Gateway is the component that understands the TSDB block format in S3 and makes historical data queryable. It's the "S3 reader." Sidecars serve hot data; the Store Gateway serves everything cold. And yes — HPA-able, you can run multiple replicas.
+
+4) Thanos Query — your understanding is correct.
+HPA-able and stateless, yes. PromQL hits this layer (it presents the Prometheus-compatible query API). It fans out to all Store API backends — sidecars (EBS/recent) and Store Gateway (S3/historical) — based on the query's time range, gathers the series, dedups across the replica label, and returns. One precise addition: the Querier is also where the PromQL engine actually runs — the stores just hand back raw series; the Querier does the rate(), sum(), etc. math on the merged, deduped data. So "dedups across both EBS and S3 and returns" is right, with the nuance that it also evaluates the query expression itself.
+So the clean one-line each:
+
+Sidecar — uploads hot blocks to S3 and serves hot data to the Querier (one per Prometheus).
+Compactor — singleton background janitor: compacts (perf), downsamples (fast long-range), retention (deletes), optional dedup — all in S3.
+Store Gateway — stateless-with-cache reader that makes cold S3 data queryable; scalable.
+Querier — stateless PromQL entry point that fans out to sidecars + store gateway, dedups, evaluates, returns; scalable.
+
+You've clearly internalized the architecture — the only real correction is remembering the sidecar reads as well as uploads, and that the compactor is doing performance work, not just shrinking storage.Opus 4.8 High
