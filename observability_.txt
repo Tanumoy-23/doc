@@ -75,3 +75,55 @@ Persist the tail offset — set the DB parameter on the tail input so Fluent Bit
 Tune retries — a higher Retry_Limit (or no_limits for critical logs) so transient outages don't drop chunks, balanced against buffer capacity.
 OpenSearch HA — the multi-zone, replica-shard, 3-master setup we discussed means a single node/zone failure shouldn't take OpenSearch fully down for writes. A properly HA cluster makes "OpenSearch is down" rare — buffering covers the residual (rolling upgrades, overload, flood-stage).
 For serious durability — a Kafka buffer layer. The production-grade pattern for "never lose a log during an OpenSearch outage" is to put Kafka between Fluent Bit and OpenSearch: Fluent Bit → Kafka → consumer → OpenSearch. Kafka decouples ingestion from OpenSearch's availability — if OpenSearch is down, logs queue durably (replicated) in Kafka and drain when it recovers, with no backpressure on the source. The trade-off is running Kafka, so it's worth it only if log durability is a hard requirement.
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Row 2 — TRACES (push model)
+Flow:
+
+OBI (eBPF) →
+OTEL Agent (persistent sending_queue · retry_on_failure) →
+OTEL Gateway (HPA · multi-zone) →
+Jaeger storage exporter →
+OpenSearch
+
+Failure annotation (on the Agent → Gateway arrow):
+
+⚠️ OTEL Gateway down
+🛡️ Resilience: Agent persistent queue (file_storage) + retry → buffers spans → flush on Gateway recovery; HPA multi-replica → one replica down is routed around
+✅ Outcome: CATCH-UP (push + buffer)
+
+Row 3 — METRICS (pull at the Prometheus hop — the different one)
+Flow:
+
+Exporters (Node Exporter · kube-state-metrics · app/json_exporter) →
+OTEL Agent (scrape) →
+OTEL Gateway (exposes /metrics) →
+[Prometheus scrapes /metrics] ← this hop is PULL →
+Prometheus HA ×3 (one per zone · WAL on EBS) →
+Thanos Sidecar →
+S3
+
+Failure annotations (three distinct cases — good as callout boxes):
+
+⚠️ A) Gateway down → Prometheus scrape fails → GAP (pull can't catch up)
+⚠️ B) 1 Prometheus down → other 2 HA replicas cover → NO gap (Thanos dedups) ✅
+⚠️ C) All 3 Prometheus down → GAP during outage; recent data recovered via WAL on EBS on restart; data >2h already durable in S3
+🛡️ Resilience levers: 3 HA replicas across zones (single failure invisible) · WAL/EBS (restart-safe) · Thanos → S3 (history durable)
+🔄 Improvement box: switch the hop to remote_write (push) → buffered gap-fill + removes partial-replica issue
+
+Legend / central principle (put this as a key on the diagram)
+PipelineModelOn backend outageResilience leverLogsPushBuffer → catch upFilesystem bufferTracesPushBuffer → catch upPersistent queue + HPAMetricsPull (scrape)Gap during outageRedundancy (3 HA)
+One-line takeaway for the diagram title/footer:
+"Push pipelines survive outages by buffering and replaying; the pull hop survives by redundancy and tolerates a gap. Lever = buffering for push, HA for pull."
+Suggested visual layout
+
+Three horizontal lanes (Logs / Traces / Metrics), top to bottom.
+Each lane: green source boxes → blue collector/buffer boxes → the backend box.
+Failure points as red dashed annotations on the relevant arrow (mirroring your existing dashboards' write-path/read-path style).
+Resilience mechanisms as green callouts under each failure point.
+A legend box (the table above) bottom-right.
+Colour the pull hop differently (e.g., dashed amber arrow) so the one gap-prone link stands out from the push arrows.
+
+If it's useful, I can render this as an SVG or HTML diagram in the same style as your trace-flow / log-flow dashboards — three lanes with the failure annotations and the push/pull legend — that you could drop straight into your obs_arch folder. Want me to generate that?Opus 4.8 High
+
+
