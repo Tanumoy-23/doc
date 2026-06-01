@@ -66,3 +66,12 @@ Then it merges them into a single series. It doesn't naively pick one — it use
 And that rule is exactly why the collection-layer duplication from last turn is un-fixable: those duplicates differ by `instance`/collector-pod label, **not** by the designated `replica` label. So Thanos looks at them, sees a non-replica label differing, and concludes "these are two different series" — leaving both. Thanos dedup is *specifically and only* "collapse series that are identical except for the replica label." HA Prometheus duplication fits that pattern perfectly; un-sharded scraper duplication doesn't.
 
 So in one line: **Thanos dedups by treating the configured replica label as "ignore this when deciding if two series are the same," then merging the matches with a penalty-based sample stitcher.** Get that one label right and HA dedup just works; any duplication distinguished by a *different* label is outside what dedup can touch.
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+How to make it resilient:
+
+Enable filesystem buffering (storage.type filesystem on the inputs, with storage.total_limit_size per output). This is the #1 fix — persistent, restart-surviving buffers that ride out an outage.
+Persist the tail offset — set the DB parameter on the tail input so Fluent Bit remembers where it left off across restarts (doesn't re-read or skip lines). Pair with filesystem buffering.
+Tune retries — a higher Retry_Limit (or no_limits for critical logs) so transient outages don't drop chunks, balanced against buffer capacity.
+OpenSearch HA — the multi-zone, replica-shard, 3-master setup we discussed means a single node/zone failure shouldn't take OpenSearch fully down for writes. A properly HA cluster makes "OpenSearch is down" rare — buffering covers the residual (rolling upgrades, overload, flood-stage).
+For serious durability — a Kafka buffer layer. The production-grade pattern for "never lose a log during an OpenSearch outage" is to put Kafka between Fluent Bit and OpenSearch: Fluent Bit → Kafka → consumer → OpenSearch. Kafka decouples ingestion from OpenSearch's availability — if OpenSearch is down, logs queue durably (replicated) in Kafka and drain when it recovers, with no backpressure on the source. The trade-off is running Kafka, so it's worth it only if log durability is a hard requirement.
