@@ -1,0 +1,2079 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Observability Dashboard — ainext-devint-cluster</title>
+<style>
+  :root{
+    --bg:#f4f5f7;
+    --card:#ffffff;
+    --border:#e5e7eb;
+    --text:#1f2430;
+    --muted:#6b7280;
+    --faint:#9ca3af;
+    --primary:#5b2d90;          /* purple */
+    --primary-soft:#ece4f7;
+    --teal:#19b8a6;
+    --teal-dark:#0e9488;
+    --bar-teal:#16b3c4;
+    --bar-edge:#123a5e;
+    --green:#16a34a;
+    --green-soft:#e7f6ec;
+    --orange:#d97706;
+    --orange-soft:#fdf0df;
+    --red:#c0262c;
+    --red-soft:#fdecec;
+    --mono:ui-monospace,"Cascadia Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+    --shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.06);
+    --ring-track:#eceef2;
+  }
+  body.dark{
+    --bg:#11151c;
+    --card:#1a202b;
+    --border:#2b3442;
+    --text:#e7ebf2;
+    --muted:#9aa4b2;
+    --faint:#6b7585;
+    --primary-soft:#33255c;
+    --green-soft:#11301d;
+    --orange-soft:#3a2a10;
+    --red-soft:#3a1414;
+    --shadow:0 1px 3px rgba(0,0,0,.4);
+    --ring-track:#2b3442;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:13px;
+       border-bottom:4px solid var(--teal);min-height:100vh}
+
+  /* ============ TOP BAR ============ */
+  .topbar{display:flex;align-items:center;gap:18px;background:var(--card);
+          border-bottom:1px solid var(--border);padding:0 18px;height:52px;
+          position:sticky;top:0;z-index:50}
+  .brand{display:flex;align-items:baseline;gap:6px;white-space:nowrap}
+  .brand .infosys{font-size:9px;letter-spacing:.5px;color:var(--muted);display:block;line-height:1}
+  .brand .topaz{font-weight:700;font-size:17px;letter-spacing:.3px}
+  .brand .ainext{color:#c0262c;font-size:11px;font-weight:600}
+  .brand .sep{color:var(--border);font-weight:300}
+  .module-switch{display:flex;align-items:center;gap:5px;font-weight:700;font-size:14px;
+                 cursor:pointer;position:relative;user-select:none;padding:6px 4px;border-radius:6px}
+  .module-switch:hover{background:var(--bg)}
+  .module-switch .chev{font-size:10px;color:var(--muted)}
+  .menu{position:absolute;top:110%;left:0;background:var(--card);border:1px solid var(--border);
+        border-radius:10px;box-shadow:0 10px 30px rgba(16,24,40,.14);min-width:200px;
+        padding:6px;display:none;z-index:100}
+  .menu.open{display:block}
+  .menu a{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:7px;
+          color:var(--text);text-decoration:none;font-weight:500;font-size:13px}
+  .menu a:hover{background:var(--bg)}
+  .menu a.active{background:var(--primary-soft);color:var(--primary)}
+  .menu .micon{width:16px;text-align:center;color:var(--muted)}
+
+  .top-right{margin-left:auto;display:flex;align-items:center;gap:16px}
+  .cluster-select{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;
+                  color:var(--muted);cursor:pointer;padding:6px 10px;border-radius:7px;position:relative}
+  .cluster-select:hover{background:var(--bg)}
+  .cluster-menu{position:absolute;top:115%;left:0;background:var(--card);border:1px solid var(--border);
+                border-radius:10px;box-shadow:0 10px 30px rgba(16,24,40,.16);min-width:220px;
+                padding:6px;display:none;z-index:100}
+  .cluster-menu.open{display:block}
+  .cl-head{font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);
+           font-weight:700;padding:6px 12px 8px;font-family:var(--sans)}
+  .cl-opt{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:7px;
+          font-family:var(--mono);font-size:12px;color:var(--text);cursor:pointer}
+  .cl-opt:hover{background:var(--bg)}
+  .cl-opt.active{background:var(--primary-soft);color:var(--primary)}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+  .dot.green{background:var(--green)}
+  .dot.red{background:var(--red)}
+  .dot.orange{background:var(--orange)}
+  .bell{position:relative;cursor:pointer;font-size:16px;color:var(--muted)}
+  .bell .badge{position:absolute;top:-6px;right:-7px;background:var(--red);color:#fff;
+               font-size:9px;font-weight:700;border-radius:8px;padding:1px 4px}
+  .user{display:flex;align-items:center;gap:9px;cursor:pointer;position:relative;
+        padding:5px 6px;border-radius:8px}
+  .user:hover{background:var(--bg)}
+  .user .uname{font-size:12px;font-weight:600;line-height:1.15}
+  .user .ucompany{font-size:10px;color:var(--muted)}
+  .avatar{width:30px;height:30px;border-radius:50%;background:var(--primary);color:#fff;
+          display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+  .user-menu{position:absolute;top:115%;right:0;background:var(--card);border:1px solid var(--border);
+             border-radius:12px;box-shadow:0 10px 30px rgba(16,24,40,.16);width:230px;
+             padding:10px;display:none;z-index:100}
+  .user-menu.open{display:block}
+  .um-head{display:flex;gap:10px;align-items:center;padding:6px 6px 12px;border-bottom:1px solid var(--border)}
+  .um-row{display:flex;align-items:center;justify-content:space-between;padding:10px 8px;
+          border-radius:8px;cursor:pointer;color:var(--text);font-weight:500}
+  .um-row:hover{background:var(--bg)}
+  .um-row .lft{display:flex;gap:10px;align-items:center}
+  .um-row .micon{color:var(--muted);width:16px;text-align:center}
+  .um-row.logout{color:var(--red)}
+  .theme-pills{display:flex;gap:6px;padding:0 8px 8px}
+  .theme-pill{flex:1;text-align:center;padding:6px 0;border:1px solid var(--border);
+              border-radius:7px;cursor:pointer;font-size:12px;color:var(--muted)}
+  .theme-pill.active{background:var(--primary-soft);color:var(--primary);
+                     border-color:color-mix(in srgb,var(--primary) 35%,transparent);font-weight:600}
+
+  /* ============ LAYOUT ============ */
+  .shell{display:flex;min-height:calc(100vh - 56px)}
+  .sidebar{width:200px;flex:0 0 200px;background:var(--card);border-right:1px solid var(--border);
+           padding:14px 10px;position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto;
+           transition:width .22s ease,flex-basis .22s ease}
+  .sidebar.collapsed{width:58px;flex-basis:58px}
+  .sidebar.collapsed .ntext,
+  .sidebar.collapsed .nav-label{display:none}
+  .sidebar.collapsed .nav-item{justify-content:center;padding:10px 0}
+  .sidebar.collapsed .hamburger{text-align:center;padding:4px 0}
+  .hamburger{font-size:15px;color:var(--muted);padding:4px 8px;cursor:pointer;margin-bottom:14px}
+  .nav-label{font-size:9.5px;letter-spacing:1.2px;color:var(--faint);font-weight:700;
+             text-transform:uppercase;padding:12px 10px 6px}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;
+            color:var(--text);cursor:pointer;font-weight:500;font-size:12.5px}
+  .nav-item:hover{background:var(--bg)}
+  .nav-item.active{background:var(--primary-soft);color:var(--primary);font-weight:600}
+  .nav-item .nicon{width:16px;text-align:center;color:var(--muted);font-size:13px}
+  .nav-item.active .nicon{color:var(--primary)}
+  .nav-item .count{margin-left:auto;background:var(--red);color:#fff;font-size:9.5px;
+                   font-weight:700;border-radius:8px;padding:1px 6px}
+
+  /* expandable nav groups (Application Metrics) */
+  .nav-parent{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;
+              color:var(--text);cursor:pointer;font-weight:500;font-size:12.5px;user-select:none}
+  .nav-parent:hover{background:var(--bg)}
+  .nav-parent .nicon{width:16px;text-align:center;color:var(--muted);font-size:13px}
+  .nav-parent .np-caret{margin-left:auto;font-size:10px;color:var(--faint);transition:transform .18s ease}
+  .nav-group.open .nav-parent .np-caret{transform:rotate(90deg)}
+  .nav-children{display:none;margin:2px 0 4px}
+  .nav-group.open .nav-children{display:block}
+  .nav-item.child{font-size:12px;padding:7px 10px 7px 30px}
+  .sidebar.collapsed .nav-parent .ntext,
+  .sidebar.collapsed .nav-parent .np-caret{display:none}
+  .sidebar.collapsed .nav-children{display:none}
+  .sidebar.collapsed .nav-parent{justify-content:center;padding:10px 0}
+
+  .main{flex:1;padding:14px 26px 40px;min-width:0}
+  .breadcrumb{font-size:11.5px;color:var(--muted);padding:4px 0 14px}
+  .breadcrumb a{color:var(--muted);text-decoration:none}
+  .breadcrumb a:hover{color:var(--primary)}
+  .breadcrumb .cur{color:var(--text)}
+
+  .page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;
+             flex-wrap:wrap;margin-bottom:16px}
+  .page-title{font-size:20px;font-weight:700}
+  .page-title .sub{font-weight:400;color:var(--muted);font-size:14px}
+  .refreshed{font-size:11px;color:var(--faint);margin-top:4px;font-family:var(--mono)}
+  .res-pills{display:flex;gap:6px;background:var(--card);border:1px solid var(--border);
+             border-radius:999px;padding:4px}
+  .res-pill{padding:6px 16px;border-radius:999px;cursor:pointer;font-weight:600;
+            color:var(--muted);font-size:12px}
+  .res-pill.active{background:var(--primary);color:#fff}
+
+  /* ============ PAGES ============ */
+  .page{display:none}
+  .page.active{display:block}
+  .placeholder{background:var(--card);border:1px dashed var(--border);border-radius:12px;
+               padding:60px 20px;text-align:center;color:var(--faint)}
+  .placeholder b{display:block;font-size:15px;color:var(--muted);margin-bottom:6px}
+
+  /* ============ KPI CARDS ============ */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:22px}
+  .kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;
+       box-shadow:var(--shadow);padding:14px 18px 16px;border-top:3px solid var(--border)}
+  .kpi.t-dark{border-top-color:#1e2a3a}
+  .kpi.t-green{border-top-color:var(--green)}
+  .kpi.t-red{border-top-color:var(--red)}
+  .kpi.t-orange{border-top-color:var(--orange)}
+  .kpi .k-label{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .kpi .k-value{font-size:30px;font-weight:700;font-family:var(--mono);margin:6px 0 4px}
+  .kpi .k-value.red{color:var(--red)}
+  .kpi .k-value.green{color:var(--green)}
+  .kpi .k-sub{font-size:11px;color:var(--faint)}
+  .kpi .k-sub b{color:var(--muted)}
+
+  /* segmented status bar + pills (Nodes / Pods) */
+  .seg-bar{display:flex;height:7px;border-radius:5px;overflow:hidden;margin:10px 0 10px;
+           background:color-mix(in srgb,var(--border) 65%,transparent);gap:2px}
+  .seg-bar span{display:block;height:100%}
+  .stat-pills{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11px;color:var(--muted)}
+  .stat-pills .sp{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .stat-pills .sd{width:7px;height:7px;border-radius:2px;display:inline-block;flex:0 0 auto}
+
+  /* gauge-style KPI cards (CPU / Memory) */
+  .gauge-kpi{display:flex;align-items:center;gap:16px;padding:16px 18px}
+  .gk-ring{position:relative;flex:0 0 auto;width:68px;height:68px;
+           display:flex;align-items:center;justify-content:center}
+  .gk-arc{transition:stroke-dashoffset .6s ease}
+  .gk-pct{position:absolute;font-family:var(--mono);font-weight:700;font-size:17px;letter-spacing:-.5px}
+  .gk-pct small{font-size:9px;font-weight:600;margin-left:1px;opacity:.8}
+  .gk-meta{min-width:0}
+  .gk-meta .k-label{margin-bottom:4px}
+  .gk-detail{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--text);line-height:1.1}
+  .gk-detail b{font-weight:700}
+  .gk-detail span{font-size:10px;font-weight:600;color:var(--muted);margin-left:2px}
+  .gk-note{font-size:10.5px;color:var(--faint);margin-top:4px}
+
+  /* ============ SECTION CARDS ============ */
+  .section{background:var(--card);border:1px solid var(--border);border-radius:12px;
+           box-shadow:var(--shadow);padding:18px 22px;margin-bottom:22px}
+  .sec-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px}
+  .sec-title{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13.5px}
+  .chip{font-size:10px;font-weight:700;letter-spacing:.6px;padding:3px 10px;border-radius:999px}
+  .chip.critical{background:var(--red-soft);color:var(--red)}
+  .chip.ready{background:var(--green-soft);color:var(--green)}
+  .view-link{font-size:12px;font-weight:600;color:var(--primary);text-decoration:none;cursor:pointer}
+  .view-link:hover{text-decoration:underline}
+
+  /* storage health */
+  .storage-grid{display:grid;grid-template-columns:230px 1fr;gap:30px;align-items:center}
+  @media (max-width:900px){.storage-grid{grid-template-columns:1fr}}
+  .gauge-wrap{display:flex;align-items:center;justify-content:center;position:relative}
+  .gauge-center{position:absolute;text-align:center}
+  .gauge-center .pct{font-size:28px;font-weight:700;font-family:var(--mono);color:var(--red)}
+  .gauge-center .lbl{font-size:9px;letter-spacing:1px;color:var(--muted);font-weight:700}
+  .gauge-center .gb{font-size:10px;color:var(--faint);font-family:var(--mono)}
+  .stor-stats{display:flex;gap:42px;flex-wrap:wrap;margin-bottom:14px}
+  .stat .v{font-family:var(--mono);font-size:21px;font-weight:700}
+  .stat .v small{font-size:11px;font-weight:600;color:var(--muted)}
+  .stat .l{font-size:11px;color:var(--muted);margin-top:2px}
+  .stat.used .v{color:var(--red)}
+  .stat.free .v{color:var(--green)}
+  .util-label{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px}
+  .util-label .pct{color:var(--red);font-family:var(--mono);font-weight:700}
+  .util-bar{height:9px;border-radius:6px;background:color-mix(in srgb,var(--border) 60%,transparent);overflow:hidden}
+  .util-bar .fill{height:100%;width:94%;border-radius:6px;
+                  background:linear-gradient(90deg,#8e1d22,#c0262c)}
+  .alert-banner{display:flex;gap:10px;align-items:flex-start;background:var(--red-soft);
+                border:1px solid color-mix(in srgb,var(--red) 25%,transparent);
+                border-radius:8px;padding:11px 14px;margin-top:14px;font-size:12px;color:var(--text)}
+  .alert-banner b{color:var(--red)}
+  .alert-banner .ic{color:var(--red)}
+
+  /* storage by tenant */
+  .tt-head{display:grid;grid-template-columns:170px 1fr 110px;gap:14px;
+           font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);
+           font-weight:700;padding:6px 0;border-bottom:1px solid var(--border)}
+  .tt-head .r{text-align:right}
+  .tt-row{display:grid;grid-template-columns:170px 1fr 110px;gap:14px;align-items:center;
+          padding:7px 0;border-bottom:1px solid color-mix(in srgb,var(--border) 55%,transparent)}
+  .tt-row:hover{background:color-mix(in srgb,var(--bg) 60%,transparent)}
+  .tt-row .tname{font-family:var(--mono);font-size:11.5px}
+  .tt-row .tval{font-family:var(--mono);font-size:11.5px;text-align:right;color:var(--muted)}
+  .tbar{height:7px;border-radius:5px;position:relative}
+  .tbar .tfill{height:100%;border-radius:5px;
+               background:linear-gradient(90deg,var(--bar-edge) 0 14px,var(--bar-teal) 30px);
+               min-width:6px}
+
+  /* node grid */
+  .node-tools{display:flex;align-items:center;gap:12px}
+  .search-box{display:flex;align-items:center;gap:7px;border:1px solid var(--border);
+              border-radius:8px;padding:6px 10px;background:var(--bg);color:var(--muted)}
+  .search-box input{border:none;outline:none;background:transparent;color:var(--text);
+                    font-size:12px;width:130px;font-family:inherit}
+  .node-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:14px}
+  .node{border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--card)}
+  .node:hover{box-shadow:var(--shadow);border-color:color-mix(in srgb,var(--teal) 45%,var(--border))}
+  .node .n-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px}
+  .node .n-name{font-family:var(--mono);font-size:10px;line-height:1.45;word-break:break-all;color:var(--text)}
+  .node .n-name .dot{margin-right:5px}
+  .nbadge{font-size:9px;font-weight:700;padding:2px 8px;border-radius:999px;flex:0 0 auto}
+  .nbadge.ready{background:var(--green-soft);color:var(--green)}
+  .nbadge.warn{background:var(--orange-soft);color:var(--orange)}
+  .meter{margin-bottom:8px}
+  .meter .m-line{display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);margin-bottom:3px}
+  .meter .m-line .pv{font-family:var(--mono);color:var(--text)}
+  .meter .m-bar{height:5px;border-radius:4px;background:color-mix(in srgb,var(--border) 65%,transparent)}
+  .meter .m-fill{height:100%;border-radius:4px;background:var(--green)}
+  .meter .m-fill.hot{background:var(--red)}
+  .meter .m-fill.warm{background:var(--orange)}
+  .node .n-pods{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--muted);
+                border-top:1px dashed var(--border);padding-top:8px;margin-top:9px}
+  .node .n-pods b{font-family:var(--mono);color:var(--text)}
+
+  /* top storage consumers */
+  .cons-row{padding:9px 2px}
+  .cons-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
+  .cons-top .cn{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px}
+  .cons-top .sq{width:8px;height:8px;background:var(--red);display:inline-block;border-radius:2px}
+  .cons-top .cp{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .cons-bar{height:6px;border-radius:5px;background:color-mix(in srgb,var(--border) 65%,transparent)}
+  .cons-fill{height:100%;border-radius:5px;background:linear-gradient(90deg,#8e1d22,#d4484e)}
+  .pct-note{font-size:10px;color:var(--faint)}
+
+  .nfs-two-col{display:grid;grid-template-columns:1.5fr 1fr;gap:22px}
+  @media (max-width:1000px){.nfs-two-col{grid-template-columns:1fr}}
+
+  /* ===== tenant view: drill-down ===== */
+  .tenant-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+  .tcard{border:1px solid var(--border);border-radius:10px;padding:14px 16px;background:var(--card);
+         cursor:pointer;border-left:4px solid var(--border);transition:box-shadow .15s,transform .12s}
+  .tcard:hover{box-shadow:var(--shadow);transform:translateY(-1px)}
+  .tcard .tc-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:12px}
+  .tcard .tc-name{display:flex;align-items:center;gap:9px;min-width:0}
+  .tcard .tc-mono{font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:.3px;
+                  word-break:break-word}
+  .tc-envdot{width:11px;height:11px;border-radius:3px;flex:0 0 auto;display:inline-block;margin-top:3px}
+  .tc-ver{font-size:10.5px;color:var(--muted);margin-top:2px;font-family:var(--mono)}
+  .ver-badge{display:inline-flex;align-items:center;gap:5px;margin-top:6px;font-size:10px;
+             font-family:var(--mono);color:var(--muted);background:var(--bg);
+             border:1px solid var(--border);border-radius:999px;padding:2px 9px 2px 7px;line-height:1.5}
+  .ver-badge b{color:var(--text);font-weight:700;letter-spacing:.2px}
+  .ver-ic{color:var(--teal);font-size:10px;line-height:1}
+  .tc-env{font-size:9px;font-weight:700;letter-spacing:.6px;padding:3px 9px;border-radius:999px;flex:0 0 auto}
+  .tc-env.prd{background:var(--red-soft);color:var(--red)}
+  .tc-env.nonprd{background:var(--orange-soft);color:var(--orange)}
+  .tc-env.trn{background:var(--primary-soft);color:var(--primary)}
+  .tc-env.poc{background:#e6f0fb;color:#2563eb}
+  body.dark .tc-env.poc{background:#16263d;color:#7fb0f5}
+  .tc-pods{display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-top:1px dashed var(--border);
+           padding-top:11px;font-size:12px}
+  .tc-pods .pods-total{color:var(--muted)} .tc-pods b{font-family:var(--mono);color:var(--text)}
+  .tc-pods .pods-ok{color:var(--green);font-weight:600}
+  .tc-pods .pods-bad{color:var(--red);font-weight:600}
+  .tc-pods .pods-bad.muted{color:var(--faint);font-weight:500}
+
+  /* left accent colors shared by all drill-down cards */
+  .accent-healthy{border-left-color:var(--green)}
+  .accent-warning{border-left-color:var(--orange)}
+  .accent-critical{border-left-color:var(--red)}
+
+  /* back link + page head */
+  .tv-back{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;
+           color:var(--primary);cursor:pointer;margin-bottom:14px}
+  .tv-back:hover{text-decoration:underline}
+  .tv-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+  .tv-title{font-size:19px;font-weight:700}
+  .tv-sub{font-size:12px;color:var(--muted);margin-left:8px;font-family:var(--mono)}
+  .tv-level{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
+            background:var(--primary-soft);color:var(--primary);padding:3px 10px;border-radius:999px;
+            margin-left:10px;vertical-align:middle;font-family:var(--sans)}
+
+  .rep-actions{margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .rep-open{font-size:11px;font-weight:600;color:var(--muted)}
+  .rep-card{cursor:pointer;transition:box-shadow .15s,transform .12s}
+  .rep-card:hover{box-shadow:var(--shadow);transform:translateY(-1px)}
+  .rep-card:hover .rep-open{color:var(--primary)}
+
+  /* pod detail: charts + history */
+  .pod-detail-grid{display:grid;grid-template-columns:1.5fr 1fr;gap:22px;align-items:start}
+  @media (max-width:1000px){.pod-detail-grid{grid-template-columns:1fr}}
+  .pod-charts{display:flex;flex-direction:column;gap:22px}
+  .mc-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+  .mc-zoom{display:flex;gap:4px}
+  .mcz{width:26px;height:26px;border:1px solid var(--border);background:var(--bg);color:var(--text);
+        border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;line-height:1;font-family:var(--sans)}
+  .mcz:hover{background:var(--card);border-color:var(--primary);color:var(--primary)}
+  .mc-plot{position:relative;user-select:none}
+  .mc-plot svg{width:100%;height:200px;display:block;cursor:crosshair;touch-action:none}
+  .mc-tip{position:absolute;display:none;transform:translate(-50%,-100%);pointer-events:none;
+          background:var(--text);color:var(--card);font-size:11px;font-family:var(--mono);
+          padding:5px 9px;border-radius:7px;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.22);z-index:5}
+  .mc-tip small{opacity:.7}
+  .mc-tip::after{content:"";position:absolute;left:50%;top:100%;transform:translateX(-50%);
+                 border:5px solid transparent;border-top-color:var(--text)}
+  .mc-hint{font-size:9.5px;color:var(--faint);text-align:right;margin-top:2px}
+  .mc-cross{stroke:var(--faint);stroke-width:1;stroke-dasharray:3 3}
+  .ch-grid{stroke:var(--border);stroke-width:1;opacity:.6}
+  .ch-axis{fill:var(--faint);font-size:9px;font-family:var(--mono);text-anchor:end}
+
+  .pod-history{display:flex;flex-direction:column;max-height:340px;overflow:auto}
+  .ph-row{display:grid;grid-template-columns:46px 10px 1fr;align-items:start;gap:9px;
+          padding:8px 2px;border-bottom:1px solid color-mix(in srgb,var(--border) 55%,transparent)}
+  .ph-row:last-child{border-bottom:none}
+  .ph-time{font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+  .ph-dot{width:8px;height:8px;border-radius:50%;margin-top:4px;background:var(--green)}
+  .ph-dot.info{background:var(--muted)} .ph-dot.ok{background:var(--green)}
+  .ph-dot.warn{background:var(--orange)} .ph-dot.error{background:var(--red)}
+  .ph-text{font-size:11.5px;line-height:1.45;color:var(--text)}
+
+  /* service (pod) grid */
+  .svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+  .svc-card{border:1px solid var(--border);border-left:4px solid var(--border);border-radius:10px;
+            padding:13px 15px;background:var(--card);cursor:pointer;transition:box-shadow .15s,transform .12s}
+  .svc-card:hover{box-shadow:var(--shadow);transform:translateY(-1px)}
+  .svc-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+  .svc-name{font-weight:700;font-size:14px}
+  .svc-badge{font-size:9.5px;font-weight:700;letter-spacing:.4px;padding:2px 9px;border-radius:999px;white-space:nowrap}
+  .svc-badge.ok{background:var(--green-soft);color:var(--green)}
+  .svc-badge.warn{background:var(--red-soft);color:var(--red)}
+  .svc-badge.bad{background:var(--red-soft);color:var(--red)}
+  .svc-counts{font-size:11.5px;color:var(--muted);margin-bottom:6px}
+  .svc-counts b{color:var(--text);font-family:var(--mono)}
+  .svc-counts .ok{color:var(--green);font-weight:600} .svc-counts .bad{color:var(--red);font-weight:600}
+  .svc-rep{font-size:11px;color:var(--muted);margin-bottom:10px}
+  .svc-rep .mono{font-family:var(--mono);color:var(--text)}
+
+  /* perf meter rows (CPU / Mem) */
+  .pm{display:flex;flex-direction:column;gap:6px}
+  .pm-row{display:grid;grid-template-columns:34px 1fr auto;align-items:center;gap:9px}
+  .pm-lbl{font-size:10.5px;color:var(--muted);font-weight:600}
+  .pm-track{height:7px;border-radius:5px;background:color-mix(in srgb,var(--border) 65%,transparent);overflow:hidden}
+  .pm-fill{height:100%;border-radius:5px;background:var(--green);transition:width .5s ease}
+  .pm-fill.warm{background:var(--orange)} .pm-fill.hot{background:var(--red)}
+  .pm-val{font-size:10.5px;font-family:var(--mono);color:var(--text);white-space:nowrap}
+  .pm-val small{color:var(--faint)}
+
+  /* replica grid */
+  .rep-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+  .rep-card{border:1px solid var(--border);border-left:4px solid var(--border);border-radius:10px;
+            padding:14px 16px;background:var(--card)}
+  .rep-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+  .rep-name{font-family:var(--mono);font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:8px}
+  .rep-meta{font-size:10.5px;color:var(--faint);font-family:var(--mono);margin-bottom:11px}
+  .rep-meta .bad{color:var(--red)}
+  .ns-badge{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.3px;
+            background:var(--primary-soft);color:var(--primary);padding:2px 8px;border-radius:999px;font-family:var(--mono)}
+  .rep-actions{margin-top:12px;display:flex;justify-content:flex-end}
+  .tv-btn{font-size:11px;font-weight:600;color:var(--primary);background:var(--primary-soft);
+          border:none;border-radius:7px;padding:6px 14px;cursor:pointer;font-family:var(--sans)}
+  .tv-btn:hover{filter:brightness(.96)}
+
+  /* logs modal */
+  .logs-overlay{position:fixed;inset:0;background:rgba(10,14,20,.55);display:none;
+                align-items:center;justify-content:center;z-index:200;padding:24px}
+  .logs-overlay.open{display:flex}
+  .logs-window{width:min(1060px,95vw);height:78vh;background:#0f1620;border-radius:12px;
+               box-shadow:0 24px 60px rgba(0,0,0,.5);display:flex;flex-direction:column;overflow:hidden;
+               border:1px solid #223;transition:width .18s ease,height .18s ease}
+  .logs-window.maximized{width:97vw;height:94vh}
+  .lm-bar{display:flex;align-items:center;gap:12px;padding:10px 14px;background:#161f2b;border-bottom:1px solid #223}
+  .lm-dots{display:flex;gap:7px;flex:0 0 auto}
+  .lm-dots i{width:11px;height:11px;border-radius:50%;display:block}
+  .lm-dots .d-r{background:#ff5f56}.lm-dots .d-y{background:#ffbd2e}.lm-dots .d-g{background:#27c93f}
+  .lm-title{color:#c7d2e0;font-size:12.5px;font-weight:600;font-family:var(--mono);flex:1;text-align:center;
+            white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lm-actions{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+  .lm-tf{background:#0f1620;color:#c7d2e0;border:1px solid #2a3647;border-radius:7px;
+         font-size:11px;font-family:var(--mono);padding:5px 8px;cursor:pointer;outline:none}
+  .lm-btn{background:#1f6feb;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:600;
+          padding:6px 11px;cursor:pointer;font-family:var(--sans)}
+  .lm-btn:hover{background:#388bfd}
+  .lm-ico{background:#22304a;color:#c7d2e0;border:none;width:26px;height:26px;border-radius:7px;
+          cursor:pointer;font-size:13px;line-height:1}
+  .lm-ico:hover{background:#2c3e5e}
+  .lm-x{background:#ff5f56;color:#5a0b07;border:none;width:22px;height:22px;border-radius:50%;
+        cursor:pointer;font-size:11px;font-weight:700;line-height:1}
+  .lm-sub{padding:7px 16px;background:#121a25;border-bottom:1px solid #1d2735;
+          color:#7f8ea3;font-size:10.5px;font-family:var(--mono)}
+  .lm-body{flex:1;padding:14px 16px;overflow:auto;font-family:var(--mono);font-size:11.5px;line-height:1.7;background:#0f1620}
+  .log-line{white-space:pre;color:#aebdce}
+  .log-ts{color:#7f8ea3}
+  .log-lvl{font-weight:700}
+  .log-lvl.info{color:#4ea1ff}.log-lvl.debug{color:#9aa7b6}
+  .log-lvl.warn{color:#e2a83b}.log-lvl.error{color:#ff6b6b}
+  .log-pod{color:#6fd3c5}
+  .log-msg{color:#d6deea}
+  .log-cursor{color:#27c93f;animation:tvblink 1s steps(1) infinite}
+  @keyframes tvblink{50%{opacity:0}}
+
+  /* ===== configuration ===== */
+  .cfg-tabs{display:flex;gap:6px;border-bottom:1px solid var(--border);margin-bottom:20px;flex-wrap:wrap}
+  .cfg-tab{padding:9px 16px;border:none;background:transparent;color:var(--muted);font-weight:600;
+           font-size:13px;cursor:pointer;border-bottom:2px solid transparent;font-family:var(--sans)}
+  .cfg-tab:hover{color:var(--text)}
+  .cfg-tab.active{color:var(--primary);border-bottom-color:var(--primary)}
+  .cfg-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:22px;align-items:start}
+  @media (max-width:1000px){.cfg-grid{grid-template-columns:1fr}}
+  .form-row{margin-bottom:16px}
+  .fold{border:1px solid var(--border);border-radius:10px;margin-bottom:16px;overflow:hidden}
+  .fold-head{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;
+             cursor:pointer;user-select:none;background:var(--card)}
+  .fold-head:hover{background:var(--bg)}
+  .fold-title{font-weight:600;font-size:12.5px}
+  .fold-caret{color:var(--muted);font-size:11px;transition:transform .18s ease}
+  .fold:not(.open) .fold-caret{transform:rotate(-90deg)}
+  .fold-body{padding:4px 14px 14px}
+  .fold:not(.open) .fold-body{display:none}
+  .form-row.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media (max-width:560px){.form-row.two{grid-template-columns:1fr}}
+  .fl{display:block;font-size:11px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;
+      color:var(--muted);margin-bottom:6px}
+  .cfg-head{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:700;color:var(--text);
+            letter-spacing:.2px;margin-bottom:14px;padding-bottom:9px;border-bottom:1px solid var(--border)}
+  .cfg-head::before{content:"";width:4px;height:15px;border-radius:2px;background:var(--primary);flex:0 0 auto}
+  .fin{width:100%;border:1px solid var(--border);background:var(--bg);color:var(--text);
+       border-radius:8px;padding:9px 11px;font-size:13px;font-family:var(--sans);outline:none}
+  .fin:focus{border-color:var(--primary)}
+  .fin.static{display:flex;align-items:center;color:var(--muted);background:var(--card)}
+  select.fin{cursor:pointer}
+  .cfg-tools{display:flex;gap:12px;margin-bottom:8px}
+  .link-btn{background:none;border:none;color:var(--primary);font-size:11.5px;font-weight:600;
+            cursor:pointer;padding:0;font-family:var(--sans)}
+  .link-btn:hover{text-decoration:underline}
+  .app-check-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  .app-check{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;
+             padding:8px 11px;font-size:12px;font-family:var(--mono);cursor:pointer;background:var(--card)}
+  .app-check:hover{border-color:var(--primary)}
+  .app-check input{accent-color:var(--primary);width:14px;height:14px;cursor:pointer}
+  .def-check{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:500;
+             cursor:pointer;margin-right:14px}
+  .def-check input{accent-color:var(--primary);width:15px;height:15px;cursor:pointer}
+  .yaml-box{width:100%;margin-top:10px;background:#0f1620;color:#d6deea;border:1px solid #223;
+            border-radius:8px;padding:12px 14px;font-family:var(--mono);font-size:11.5px;line-height:1.6;
+            white-space:pre;overflow:auto;tab-size:2}
+  .yaml-box.readonly{max-height:260px}
+
+  /* overlay syntax-highlighted editor */
+  .yaml-edit{position:relative;margin-top:10px;height:240px}
+  .yaml-edit.tall{height:360px}
+  .yaml-hl,.code-input{position:absolute;inset:0;margin:0;border:1px solid #223;border-radius:8px;
+       padding:12px 14px;font-family:var(--mono);font-size:11.5px;line-height:1.6;tab-size:2;
+       white-space:pre;overflow:auto;box-sizing:border-box}
+  .yaml-hl{background:#0f1620;color:#d6deea;pointer-events:none;z-index:1}
+  .code-input{background:transparent;color:transparent;caret-color:#e6edf3;z-index:2;
+              resize:none;outline:none;border-color:transparent}
+  .code-input:focus{outline:none}
+  .yaml-edit:focus-within{box-shadow:0 0 0 1px var(--primary);border-radius:8px}
+  .code-input::selection{background:rgba(80,130,200,.35)}
+  /* syntax colors */
+  .y-key{color:#6cb6ff}
+  .y-str{color:#9ece6a}
+  .y-num{color:#e0a458}
+  .y-bool{color:#bb9af7}
+  .y-val{color:#cdd6e3}
+  .y-punc{color:#7f8ea3}
+  .y-comment{color:#6b7785;font-style:italic}
+  .editor-label{font-size:11px;color:var(--muted);margin-top:10px}
+  .yaml-status{font-size:11.5px;font-weight:600;font-family:var(--mono);margin-top:8px;min-height:16px}
+  .yaml-status.ok{color:var(--green)}
+  .yaml-status.err{color:var(--red)}
+  .form-actions{display:flex;align-items:center;gap:14px;margin-top:18px}
+  .btn-primary{background:var(--primary);color:#fff;border:none;border-radius:8px;padding:9px 20px;
+               font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans)}
+  .btn-primary:hover{filter:brightness(1.08)}
+  .cfg-msg{font-size:12px;font-weight:600}
+  .cfg-msg.ok{color:var(--green)} .cfg-msg.err{color:var(--red)}
+  .cfg-empty{color:var(--faint);font-size:12.5px;padding:18px;text-align:center;
+             border:1px dashed var(--border);border-radius:10px}
+  .user-list{display:flex;flex-direction:column;gap:10px}
+  .user-card{border:1px solid var(--border);border-left:3px solid var(--primary);border-radius:10px;padding:12px 14px}
+  .uc-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px}
+  .uc-name{font-weight:700;font-size:13.5px}
+  .uc-role{font-size:9.5px;font-weight:700;letter-spacing:.4px;padding:2px 9px;border-radius:999px;text-transform:uppercase}
+  .uc-role.admin{background:var(--red-soft);color:var(--red)}
+  .uc-role.operator{background:var(--orange-soft);color:var(--orange)}
+  .uc-role.viewer{background:var(--green-soft);color:var(--green)}
+  .uc-meta{font-size:11.5px;color:var(--muted);font-family:var(--mono);margin-bottom:9px}
+  .uc-tags{display:flex;gap:7px;flex-wrap:wrap}
+  .uc-tag{font-size:10px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--bg);
+          border:1px solid var(--border);color:var(--muted)}
+  .uc-tag.custom{background:var(--primary-soft);color:var(--primary);border-color:transparent}
+  .uc-tag.default{color:var(--muted)}
+
+  /* recent activities */
+  .last24{font-size:11px;color:var(--faint)}
+  .act-row{display:flex;gap:11px;align-items:flex-start;padding:11px 2px;
+           border-bottom:1px solid color-mix(in srgb,var(--border) 55%,transparent)}
+  .act-row:last-child{border-bottom:none}
+  .act-row .dot{margin-top:5px;flex:0 0 auto}
+  .act-row .a-text{flex:1;font-size:12px;line-height:1.5}
+  .act-row .a-text b{font-weight:600}
+  .act-row .mono{font-family:var(--mono);font-size:11px}
+  .act-row .a-time{font-size:10.5px;color:var(--faint);font-family:var(--mono);flex:0 0 auto;margin-top:2px}
+</style>
+</head>
+<body>
+
+<!-- ================= TOP BAR ================= -->
+<header class="topbar">
+  <div class="brand">
+    <div>
+      <span class="infosys">Infosys</span>
+      <span class="topaz">topaz</span>
+    </div>
+    <span class="ainext">AI Next</span>
+    <span class="sep">|</span>
+  </div>
+
+  <div class="module-switch" id="moduleSwitch">
+    Observability <span class="chev">▼</span>
+    <nav class="menu" id="moduleMenu">
+      <a href="#"><span class="micon">⌂</span> Home</a>
+      <a href="#"><span class="micon">◔</span> Value Cockpit</a>
+      <a href="#"><span class="micon">🗨</span> Conversation AI</a>
+      <a href="#" class="active"><span class="micon">📊</span> Observability</a>
+      <a href="#"><span class="micon">🔍</span> Value Discovery</a>
+      <a href="#"><span class="micon">👥</span> Digital Worker</a>
+      <a href="#"><span class="micon">📄</span> Document AI</a>
+      <a href="#"><span class="micon">☆</span> Engage</a>
+      <a href="#"><span class="micon">◯</span> Fabric</a>
+      <a href="#"><span class="micon">⌁</span> Harmony</a>
+      <a href="#"><span class="micon">⚯</span> Neural Connect</a>
+    </nav>
+  </div>
+
+  <div class="top-right">
+    <div class="cluster-select" id="clusterBtn">
+      <span class="dot orange"></span> <span id="clusterName">AI Next-PaaS-Non-Prod</span> <span style="font-size:9px">▾</span>
+      <div class="cluster-menu" id="clusterMenu">
+        <div class="cl-head">Select Cluster</div>
+        <div class="cl-opt" data-cluster="AI Next-PaaS-Prod" data-dot="green"><span class="dot green"></span> AI Next-PaaS-Prod</div>
+        <div class="cl-opt active" data-cluster="AI Next-PaaS-Non-Prod" data-dot="orange"><span class="dot orange"></span> AI Next-PaaS-Non-Prod</div>
+      </div>
+    </div>
+    <div class="bell">🔔<span class="badge">3</span></div>
+    <div class="user" id="userBtn">
+      <div style="text-align:right">
+        <div class="uname">James Fernandez</div>
+        <div class="ucompany">ABC Company</div>
+      </div>
+      <div class="avatar">AD</div>
+
+      <div class="user-menu" id="userMenu">
+        <div class="um-head">
+          <div class="avatar">AD</div>
+          <div>
+            <div class="uname">James Fernandez</div>
+            <div class="ucompany">ABC Company</div>
+          </div>
+        </div>
+        <div class="um-row"><span class="lft"><span class="micon">◑</span> Themes</span><span>›</span></div>
+        <div class="theme-pills">
+          <div class="theme-pill active" id="lightBtn">☀ Light</div>
+          <div class="theme-pill" id="darkBtn">☾ Dark</div>
+        </div>
+        <div class="um-row"><span class="lft"><span class="micon">🌐</span> Languages</span><span>›</span></div>
+        <div class="um-row"><span class="lft"><span class="micon">👤</span> Roles</span><span>›</span></div>
+        <div class="um-row logout"><span class="lft"><span class="micon">⎋</span> Logout</span><span>›</span></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <!-- ================= SIDEBAR ================= -->
+  <aside class="sidebar" id="sidebar">
+    <div class="hamburger" id="sidebarToggle" title="Collapse / expand menu">☰</div>
+
+    <div class="nav-label">Overview</div>
+    <div class="nav-item active" data-page="dashboard" title="Dashboard"><span class="nicon">▦</span><span class="ntext"> Dashboard</span></div>
+    <div class="nav-item" data-page="cluster" title="Cluster Health"><span class="nicon">🗨</span><span class="ntext"> Cluster Health</span></div>
+    <div class="nav-item" data-page="nfs" title="File Storage"><span class="nicon">🖴</span><span class="ntext"> File Storage</span></div>
+    <div class="nav-item" data-page="tenant" title="Tenant View"><span class="nicon">⌂</span><span class="ntext"> Tenant View</span></div>
+
+    <div class="nav-label">Application Metrics</div>
+
+    <div class="nav-group">
+      <div class="nav-parent" onclick="toggleNavGroup(this)" title="Fabric"><span class="nicon">◯</span><span class="ntext"> Fabric</span><span class="np-caret">▸</span></div>
+      <div class="nav-children">
+        <div class="nav-item child" data-page="app-nifi" title="Nifi"><span class="ntext">Nifi</span></div>
+      </div>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-parent" onclick="toggleNavGroup(this)" title="CT"><span class="nicon">⊞</span><span class="ntext"> CT</span><span class="np-caret">▸</span></div>
+      <div class="nav-children">
+        <div class="nav-item child" data-page="app-superset" title="Superset"><span class="ntext">Superset</span></div>
+      </div>
+    </div>
+
+    <div class="nav-item" data-page="neural" title="Neural Connect"><span class="nicon">⚯</span><span class="ntext"> Neural Connect</span></div>
+
+    <div class="nav-group">
+      <div class="nav-parent" onclick="toggleNavGroup(this)" title="Workflow"><span class="nicon">⌁</span><span class="ntext"> Workflow</span><span class="np-caret">▸</span></div>
+      <div class="nav-children">
+        <div class="nav-item child" data-page="app-do" title="DO"><span class="ntext">DO</span></div>
+        <div class="nav-item child" data-page="app-dw" title="DW"><span class="ntext">DW</span></div>
+        <div class="nav-item child" data-page="app-engage" title="Engage"><span class="ntext">Engage</span></div>
+      </div>
+    </div>
+
+    <div class="nav-label">Monitoring</div>
+    <div class="nav-item" data-page="synthetic" title="Synthetic"><span class="nicon">◎</span><span class="ntext"> Synthetic</span></div>
+    <div class="nav-item" data-page="threshold" title="Service Threshold"><span class="nicon">⚖</span><span class="ntext"> Service Threshold</span></div>
+
+    <div class="nav-label">Alerts</div>
+    <div class="nav-item" data-page="active-alerts" title="Active Alerts"><span class="nicon">⚠</span><span class="ntext"> Active Alerts</span><span class="count">3</span></div>
+
+    <div class="nav-label">Settings</div>
+    <div class="nav-group">
+      <div class="nav-parent" onclick="toggleNavGroup(this)" title="Configuration"><span class="nicon">⚙</span><span class="ntext"> Configuration</span><span class="np-caret">▸</span></div>
+      <div class="nav-children">
+        <div class="nav-item child" data-page="config" data-cfgtab="users" title="Tenant Onboard"><span class="ntext">Tenant Onboard</span></div>
+        <div class="nav-item child" data-page="config" data-cfgtab="rules" title="Tenant Rule Configuration"><span class="ntext">Tenant Rule Configuration</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ================= MAIN ================= -->
+  <main class="main">
+    <div class="breadcrumb">
+      <a href="#">Home</a> / <a href="#"><span id="crumbCluster">AI Next-PaaS-Non-Prod</span></a> / <span class="cur" id="crumb">Overview</span>
+    </div>
+
+    <div class="page-head">
+      <div>
+        <div class="page-title"><span id="pageTitle">Cluster Overview</span>
+          <span class="sub">— <span id="subCluster">AI Next-PaaS-Non-Prod</span></span></div>
+        <div class="refreshed">Last refreshed: 2026-06-10 11:15:59 UTC</div>
+      </div>
+      <div class="res-pills">
+        <div class="res-pill active">All Resources</div>
+      </div>
+    </div>
+
+    <!-- ============ PAGE: DASHBOARD ============ -->
+    <div class="page active" id="page-dashboard">
+      <div class="kpis">
+        <div class="kpi t-dark">
+          <div class="k-label">Total Nodes</div>
+          <div class="k-value">18</div>
+          <div class="seg-bar">
+            <span style="width:94.4%;background:var(--green)"></span>
+            <span style="width:5.6%;background:var(--orange)"></span>
+          </div>
+          <div class="stat-pills">
+            <span class="sp"><i class="sd" style="background:var(--green)"></i>17 Ready</span>
+            <span class="sp"><i class="sd" style="background:var(--orange)"></i>1 Warning</span>
+          </div>
+        </div>
+        <div class="kpi t-green">
+          <div class="k-label">Total Pods</div>
+          <div class="k-value green">872</div>
+          <div class="seg-bar">
+            <span style="width:93.7%;background:var(--green)"></span>
+            <span style="width:3.6%;background:var(--orange)"></span>
+            <span style="width:2.7%;background:var(--red)"></span>
+          </div>
+          <div class="stat-pills">
+            <span class="sp"><i class="sd" style="background:var(--green)"></i>817 Running</span>
+            <span class="sp"><i class="sd" style="background:var(--orange)"></i>31 Pending</span>
+            <span class="sp"><i class="sd" style="background:var(--red)"></i>24 Failed</span>
+          </div>
+        </div>
+        <div class="kpi t-orange gauge-kpi">
+          <div class="gk-ring">
+            <svg viewBox="0 0 80 80" width="68" height="68">
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ring-track)" stroke-width="8"/>
+              <circle class="gk-arc" cx="40" cy="40" r="32" fill="none" stroke="var(--orange)" stroke-width="8"
+                      stroke-linecap="round" stroke-dasharray="201" stroke-dashoffset="78"
+                      transform="rotate(-90 40 40)"/>
+            </svg>
+            <span class="gk-pct" style="color:var(--orange)">61<small>%</small></span>
+          </div>
+          <div class="gk-meta">
+            <div class="k-label">CPU Consumption</div>
+            <div class="gk-detail"><b>352</b> / 576 <span>vCPU</span></div>
+            <div class="gk-note">In use across 18 nodes</div>
+          </div>
+        </div>
+        <div class="kpi t-red gauge-kpi">
+          <div class="gk-ring">
+            <svg viewBox="0 0 80 80" width="68" height="68">
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ring-track)" stroke-width="8"/>
+              <circle class="gk-arc" cx="40" cy="40" r="32" fill="none" stroke="var(--red)" stroke-width="8"
+                      stroke-linecap="round" stroke-dasharray="201" stroke-dashoffset="52"
+                      transform="rotate(-90 40 40)"/>
+            </svg>
+            <span class="gk-pct" style="color:var(--red)">74<small>%</small></span>
+          </div>
+          <div class="gk-meta">
+            <div class="k-label">Memory Consumption</div>
+            <div class="gk-detail"><b>1.78</b> / 2.40 <span>TiB</span></div>
+            <div class="gk-note">In use across 18 nodes</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- File Storage Health (overview) -->
+      <section class="section">
+        <div class="sec-head">
+          <div class="sec-title"><span class="dot red"></span> File Storage Health
+            <span class="chip critical" style="margin-left:6px">CRITICAL — 94% USED</span>
+          </div>
+          <span class="view-link" data-goto="nfs">View details →</span>
+        </div>
+
+        <div class="storage-grid">
+          <div class="gauge-wrap">
+            <svg width="190" height="190" viewBox="0 0 210 210">
+              <!-- track (270° span) -->
+              <circle cx="105" cy="105" r="84" fill="none" stroke="var(--border)" stroke-width="14"
+                      stroke-dasharray="396 528" stroke-linecap="round"
+                      transform="rotate(122 105 105)"/>
+              <!-- consumed arc: 94% of 396 ≈ 372 -->
+              <circle cx="105" cy="105" r="84" fill="none" stroke="#c0262c" stroke-width="14"
+                      stroke-dasharray="372 528" stroke-linecap="round"
+                      transform="rotate(122 105 105)"/>
+              <!-- green leading segment -->
+              <circle cx="105" cy="105" r="84" fill="none" stroke="#7fce9b" stroke-width="14"
+                      stroke-dasharray="42 528" stroke-linecap="round"
+                      transform="rotate(122 105 105)"/>
+              <circle cx="172" cy="143" r="5" fill="#7c161b" opacity=".85"/>
+            </svg>
+            <div class="gauge-center">
+              <div class="pct">94%</div>
+              <div class="lbl">CONSUMED</div>
+              <div class="gb">344,286 GB</div>
+            </div>
+          </div>
+
+          <div>
+            <div class="stor-stats">
+              <div class="stat used"><div class="v">344,286.9 <small>GB</small></div><div class="l">Used</div></div>
+              <div class="stat free"><div class="v">22,832.9 <small>GB</small></div><div class="l">Free</div></div>
+              <div class="stat"><div class="v">367,119.8 <small>GB</small></div><div class="l">Total Capacity</div></div>
+            </div>
+            <div class="util-label"><span>Total Storage Utilisation</span><span class="pct">94%</span></div>
+            <div class="util-bar"><div class="fill"></div></div>
+            <div class="alert-banner">
+              <span class="ic">⚠</span>
+              <span><b>Storage Critical:</b> Cluster is at 94% capacity. Consider scaling storage or
+              archiving inactive tenant data to prevent service disruption.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Recent Activities -->
+      <section class="section">
+        <div class="sec-head">
+          <div class="sec-title"><span class="dot" style="background:var(--primary)"></span> Recent Activities</div>
+          <span class="last24">Last 24h</span>
+        </div>
+        <div id="recentActivity"></div>
+      </section>
+    </div>
+    <div class="page" id="page-cluster">
+      <div id="chRoot"></div>
+    </div>
+
+    <!-- ============ PAGE: FILE STORAGE ============ -->
+    <div class="page" id="page-nfs">
+      <section class="section">
+        <div class="sec-head">
+          <div class="sec-title"><span class="dot red"></span> File Storage Health</div>
+          <span class="chip critical">CRITICAL — 94% USED</span>
+        </div>
+
+        <div class="storage-grid">
+          <div class="gauge-wrap">
+            <svg width="210" height="210" viewBox="0 0 210 210">
+              <circle cx="105" cy="105" r="84" fill="none" stroke="var(--border)" stroke-width="14"
+                      stroke-dasharray="396 528" stroke-linecap="round"
+                      transform="rotate(122 105 105)"/>
+              <circle cx="105" cy="105" r="84" fill="none" stroke="#c0262c" stroke-width="14"
+                      stroke-dasharray="372 528" stroke-linecap="round"
+                      transform="rotate(122 105 105)"/>
+              <circle cx="105" cy="105" r="84" fill="none" stroke="#7fce9b" stroke-width="14"
+                      stroke-dasharray="42 528" stroke-linecap="round"
+                      transform="rotate(122 105 105)"/>
+              <circle cx="172" cy="143" r="5" fill="#7c161b" opacity=".85"/>
+            </svg>
+            <div class="gauge-center">
+              <div class="pct">94%</div>
+              <div class="lbl">CONSUMED</div>
+              <div class="gb">344,286 GB</div>
+            </div>
+          </div>
+
+          <div>
+            <div class="stor-stats">
+              <div class="stat used"><div class="v">344,286.9 <small>GB</small></div><div class="l">Used</div></div>
+              <div class="stat free"><div class="v">22,832.9 <small>GB</small></div><div class="l">Free</div></div>
+              <div class="stat"><div class="v">367,119.8 <small>GB</small></div><div class="l">Total Capacity</div></div>
+            </div>
+            <div class="util-label"><span>Total Storage Utilisation</span><span class="pct">94%</span></div>
+            <div class="util-bar"><div class="fill"></div></div>
+            <div class="alert-banner">
+              <span class="ic">⚠</span>
+              <span><b>Storage Critical:</b> Cluster is at 94% capacity. Consider scaling storage or
+              archiving inactive tenant data to prevent service disruption.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="nfs-two-col">
+        <section class="section" style="margin-bottom:0">
+          <div class="sec-head">
+            <div class="sec-title">Storage by Tenant</div>
+          </div>
+          <div class="tt-head"><span>Tenant</span><span>Usage</span><span class="r">Consumed</span></div>
+          <div id="tenantRows"></div>
+        </section>
+
+        <section class="section" style="margin-bottom:0">
+          <div class="sec-head">
+            <div class="sec-title"><span class="dot red"></span> Top Storage Consumers</div>
+            <span class="pct-note">% of 344,286 GB total</span>
+          </div>
+          <div id="consumers"></div>
+        </section>
+      </div>
+    </div>
+
+    <!-- ============ PLACEHOLDER PAGES ============ -->
+    <div class="page" id="page-tenant">
+      <div id="tvRoot"></div>
+    </div>
+    <div class="page" id="page-neural"><div class="placeholder"><b>Neural Connect</b>Coming soon — model connectivity and routing.</div></div>
+    <div class="page" id="page-app-nifi"><div class="placeholder"><b>Fabric · Nifi</b>Coming soon — NiFi dataflow pipelines.</div></div>
+    <div class="page" id="page-app-superset"><div class="placeholder"><b>CT · Superset</b>Coming soon — Superset dashboards &amp; analytics.</div></div>
+    <div class="page" id="page-app-do"><div class="placeholder"><b>Workflow · DO</b>Coming soon — Data Orchestration.</div></div>
+    <div class="page" id="page-app-dw"><div class="placeholder"><b>Workflow · DW</b>Coming soon — Digital Worker.</div></div>
+    <div class="page" id="page-app-engage"><div class="placeholder"><b>Workflow · Engage</b>Coming soon — Engage automation.</div></div>
+    <div class="page" id="page-synthetic"><div class="placeholder"><b>Synthetic</b>Coming soon — synthetic monitoring checks.</div></div>
+    <div class="page" id="page-threshold"><div class="placeholder"><b>Service Threshold</b>Coming soon — SLA and threshold configuration.</div></div>
+    <div class="page" id="page-active-alerts"><div class="placeholder"><b>Active Alerts</b>Coming soon — 1 critical, 2 warning alerts.</div></div>
+    <div class="page" id="page-config"><div id="cfgRoot"></div></div>
+  </main>
+</div>
+
+<!-- ============ LOGS MODAL ============ -->
+<div class="logs-overlay" id="logsModal">
+  <div class="logs-window" id="logsWindow">
+    <div class="lm-bar">
+      <span class="lm-dots"><i class="d-r"></i><i class="d-y"></i><i class="d-g"></i></span>
+      <span class="lm-title" id="lmTitle">Logs</span>
+      <span class="lm-actions">
+        <select class="lm-tf" id="lmTf" onchange="changeLogTf(this.value)" title="Timeframe">
+          <option value="all">All (60 min)</option>
+          <option value="30">Last 30 min</option>
+          <option value="15">Last 15 min</option>
+          <option value="5">Last 5 min</option>
+          <option value="1">Last 1 min</option>
+        </select>
+        <button class="lm-btn" onclick="downloadLogs()" title="Download logs">⬇ Download</button>
+        <button class="lm-ico" id="lmMax" onclick="toggleLogMax()" title="Enlarge">⛶</button>
+        <button class="lm-x" onclick="tvCloseLogs()" title="Close">✕</button>
+      </span>
+    </div>
+    <div class="lm-sub" id="lmSub"></div>
+    <div class="lm-body" id="lmBody"></div>
+  </div>
+</div>
+
+<script>
+/* ---------- data ---------- */
+const tenants = [
+  ["ainext-dev",          88189.28],
+  ["devint-2",            84354.96],
+  ["devint-24",           80528.68],
+  ["devint-3",            50805.04],
+  ["devint-5",            23964.55],
+  ["ainext-shared",        4813.83],
+  ["opensearch-operator",  3834.32],
+  ["channel-management",   2875.77],
+  ["devint-251",           2464.33],
+  ["channel-mgmt-dev",     1917.16],
+  ["fdn-dev",               410.72],
+  ["open-webui",            136.91],
+];
+
+const nodes = [
+  ["ntnxclstr19-md-0-srg5r-t7-qtz-rx7rh", 38, 50, 51, "ready"],
+  ["ntnxclstr19-md-0-srg5r-t7-qtz-5fz49",  7, 31, 43, "ready"],
+  ["ntnxclstr19-md-0-srg5r-t7-qtz-bcp6d", 29, 46, 57, "ready"],
+  ["ntnxclstr19-md-0-srg5r-t7-qtz-hwh2q", 24, 49, 38, "ready"],
+  ["ntnxclstr19-md-0-srg5r-t7-qtz-xdvlf", 29, 61, 53, "warn"],
+  ["ntnxclstr19-md-0-srg5r-t7-qtz-rz8kq", 19, 49, 75, "ready"],
+  ["ntnxclstr19-md-0-srg5r-t7-qtz-vvvdw", 37, 31, 51, "ready"],
+  ["ntnxclstr19-md-0-srg5r-t7-qtz-52995", 13, 48, 55, "ready"],
+  ["ntnxclstr19-md-0-srg5r-t7-qtz-jk56v", 25, 38, 55, "ready"],
+  ["ntnxclstr19-md-0-srg5r-t7-qtz-hxbds",  8, 36, 60, "ready"],
+  ["ntnxclstr19-md-0-srg5r-t7-qtz-8x2vv", 12, 34, 48, "ready"],
+  ["ntnxclstr19-md-0-srg5r-t7-qtz-cbtbd", 28, 43, 67, "ready"],
+  ["ntnxclstr19-md-0-srg5r-t7-qtz-jtdbl", 22, 55, 62, "ready"],
+  ["ntnxclstr19-md-0-srg5r-t7-qtz-xf5vt", 16, 40, 44, "ready"],
+  ["ntnxclstr19-skhj4-swjd8",             31, 44, 50, "ready"],
+  ["ntnxclstr19-md-0-srg5r-t7-qtz-5rclm", 18, 37, 58, "ready"],
+  ["ntnxclstr19-md-0-srg5r-t7-qtz-m9pqx", 41, 52, 49, "ready"],
+  ["ntnxclstr19-md-0-srg5r-t7-qtz-k3rjw", 11, 29, 53, "ready"],
+];
+
+/* ---------- storage by tenant (File Storage page) ---------- */
+const fmt = n => n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const maxT = tenants[0][1];
+document.getElementById("tenantRows").innerHTML = tenants.map(([name,gb]) => `
+  <div class="tt-row">
+    <span class="tname">${name}</span>
+    <div class="tbar"><div class="tfill" style="width:${Math.max(gb/maxT*100,0.6)}%"></div></div>
+    <span class="tval">${fmt(gb)} GB</span>
+  </div>`).join("");
+
+
+/* ---------- top storage consumers (File Storage page) ---------- */
+const consumers = [["ainext-dev",25.6],["devint-2",24.5],["devint-24",23.4],["devint-3",14.8]];
+document.getElementById("consumers").innerHTML = consumers.map(([n,p]) => `
+  <div class="cons-row">
+    <div class="cons-top">
+      <span class="cn"><span class="sq"></span>${n}</span>
+      <span class="cp">${p}%</span>
+    </div>
+    <div class="cons-bar"><div class="cons-fill" style="width:${p/26*100}%"></div></div>
+  </div>`).join("");
+
+/* ---------- recent activities (dashboard) ---------- */
+const activities = [
+  ["red",    "<b>Storage alert triggered</b> — ainext-devint-cluster crossed 90% file-storage threshold", "11:14"],
+  ["orange", "<b>Memory pressure</b> on node <span class='mono'>…-xdvlf</span> reached 60%", "10:52"],
+  ["green",  "Pod rescheduled successfully on <b>devint-2</b> tenant namespace", "10:31"],
+  ["orange", "<b>CPU spike</b> detected on node <span class='mono'>…-m9pqx</span> — 41% sustained", "10:05"],
+  ["green",  "New node <span class='mono'>…-5rclm</span> joined cluster — status <b>Ready</b>", "09:18"],
+  ["green",  "Synthetic check <b>api-health</b> passed across all regions", "08:47"],
+];
+document.getElementById("recentActivity").innerHTML = activities.map(([color,text,time]) => `
+  <div class="act-row">
+    <span class="dot ${color}"></span>
+    <span class="a-text">${text}</span>
+    <span class="a-time">${time}</span>
+  </div>`).join("");
+
+/* ====================================================================
+   TENANT VIEW — drill-down: Tenants → Pods/Services → Replicas → Logs
+   Data is generated deterministically so summaries always match details.
+   ==================================================================== */
+
+/* tenant catalog (name, env, AI-Next version) */
+const TV_TENANTS = [
+  {name:"RXO-PRD",      env:"prd",    ver:"v3.7.4", seed:11},
+  {name:"CMA-TRN",      env:"trn",    ver:"v3.7.5", seed:23},
+  {name:"CVS-NON-PRD",  env:"nonprd", ver:"v3.7.5", seed:31},
+  {name:"VODAFONE-POC", env:"poc",    ver:"v3.7.4", seed:47},
+  {name:"METRO-PRD",    env:"prd",    ver:"v3.7.5", seed:53},
+  {name:"WESCO-POC",    env:"poc",    ver:"v3.7.4", seed:67},
+];
+const TV_ENVLABEL  = {prd:"PRD", nonprd:"NON-PRD", trn:"TRN", poc:"POC"};
+const TV_ENVCOLOR  = {prd:"#c0262c", nonprd:"#d97706", trn:"#5b2d90", poc:"#2563eb"};
+
+/* services per tenant — desired replicas sum to 15 pods */
+const TV_SERVICES = [
+  {name:"vault",        desired:1, cpuReq:200, cpuLim:500, memReq:384, memLim:1024},
+  {name:"vault-api",    desired:3, cpuReq:400, cpuLim:600, memReq:512, memLim:1280},
+  {name:"valkey",       desired:3, cpuReq:200, cpuLim:400, memReq:256, memLim:768},
+  {name:"nfs",          desired:1, cpuReq:200, cpuLim:400, memReq:256, memLim:1024},
+  {name:"kafka",        desired:2, cpuReq:300, cpuLim:600, memReq:512, memLim:1536},
+  {name:"home-frontend", desired:1, cpuReq:400, cpuLim:600, memReq:512, memLim:768},
+  {name:"superset",      desired:1, cpuReq:300, cpuLim:600, memReq:384, memLim:1024},
+  {name:"nifi",         desired:3, cpuReq:300, cpuLim:600, memReq:512, memLim:1536},
+];
+
+/* deterministic pseudo-random in [0,1) */
+function tvRng(seed){ let s = seed % 2147483647; if (s <= 0) s += 2147483646;
+  return () => (s = s * 16807 % 2147483647) / 2147483647; }
+
+const tvHex = "0123456789abcdef";
+function tvSuffix(r){ let s=""; for(let i=0;i<5;i++) s+=tvHex[Math.floor(r()*16)]; return s; }
+function tvLevelOf(p){ return p>85?"hot":p>=70?"warm":""; }
+
+/* build full data tree once */
+const TV_DATA = TV_TENANTS.map(t => {
+  const r = tvRng(t.seed);
+  const services = TV_SERVICES.map((svc, si) => {
+    // decide how many replicas are down (issues), biased by env
+    let down = 0;
+    const roll = r();
+    if (svc.desired >= 3 && roll > 0.78) down = (roll > 0.93 ? svc.desired : 1);
+    else if (svc.desired < 3 && roll > 0.88) down = 1;
+    const up = svc.desired - down;
+    let status = down === 0 ? "Running" : (up === 0 ? "Failed" : "CrashLoopBackOff");
+    const replicas = [];
+    for (let i = 0; i < svc.desired; i++){
+      const isUp = i < up;
+      const cpuPct = isUp ? Math.round(15 + r()*78) : 0;
+      const memPct = isUp ? Math.round(20 + r()*72) : 0;
+      replicas.push({
+        name: `${svc.name}-${tvSuffix(r)}`,
+        state: isUp ? "Running" : (status === "Failed" ? "Failed" : "CrashLoopBackOff"),
+        cpuPct, memPct,
+        cpuVal: Math.round(cpuPct/100*svc.cpuLim),
+        memVal: Math.round(memPct/100*svc.memLim),
+        restarts: isUp ? 0 : Math.floor(2 + r()*9),
+      });
+    }
+    // aggregate (avg of running replicas)
+    const running = replicas.filter(p => p.state === "Running");
+    const avg = arr => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : 0;
+    return {
+      ...svc, status, up, down,
+      cpuPct: avg(running.map(p=>p.cpuPct)),
+      memPct: avg(running.map(p=>p.memPct)),
+      replicas,
+    };
+  });
+  const healthy = services.reduce((a,s)=>a+s.up,0);
+  const issues  = services.reduce((a,s)=>a+s.down,0);
+  const pods    = healthy + issues;
+  return {...t, services, healthy, issues, pods,
+          health: issues===0 ? "healthy" : (healthy===0 ? "critical" : "warning")};
+});
+
+/* ---- log generation ---- */
+const TV_LOG_MSGS = [
+  ["INFO","Readiness probe succeeded"],["INFO","Liveness probe succeeded"],
+  ["DEBUG","Certificate renewal scheduled in 14d"],["INFO","Incoming gRPC stream opened"],
+  ["INFO","gRPC stream keepalive sent"],["INFO","Connected to database pool"],
+  ["INFO","Health check passed"],["INFO","Metrics scraped: 942 series"],
+  ["WARN","Retry attempt 2/3 for upstream"],["WARN","High memory utilisation detected"],
+  ["ERROR","Connection timeout: upstream service unavailable"],
+  ["ERROR","Leader election: failed to acquire lease"],["INFO","Leader election: acquired lease"],
+  ["DEBUG","Cache hit ratio 0.91"],["INFO","Config reloaded from configmap"],
+];
+function tvLogs(pod){
+  const r = tvRng(pod.name.split("").reduce((a,c)=>a+c.charCodeAt(0),0));
+  const end = Date.UTC(2026,5,14,6,40,0);   // "now"
+  let ts = end - 60*60000;                   // 60 minutes ago
+  const lines = [];
+  while (ts < end){
+    let pick = TV_LOG_MSGS[Math.floor(r()*TV_LOG_MSGS.length)];
+    if (pod.state !== "Running" && r() > 0.55)
+      pick = r()>0.5 ? ["ERROR","CrashLoopBackOff: back-off restarting failed container"]
+                     : ["ERROR","Liveness probe failed: HTTP 500"];
+    lines.push({tsMs:ts, ts:new Date(ts).toISOString(), lvl:pick[0], pod:pod.name, msg:pick[1]});
+    ts += 9000 + Math.floor(r()*48000);      // 9–57s apart
+  }
+  return lines;
+}
+
+/* ---------- navigation state + render ---------- */
+let TV = { level:1, ti:null, si:null, pi:null, filter:"" };
+
+function tvGo(level, ti, si, pi){ TV.level=level; if(ti!=null)TV.ti=ti; if(si!=null)TV.si=si; if(pi!=null)TV.pi=pi; tvRender(); }
+function tvResetView(){ TV={level:1, ti:null, si:null, pi:null, filter:""}; }
+
+/* level indicator pill shown in each view header */
+function tvLevelPill(label){ return `<span class="tv-level">${label}</span>`; }
+
+function tvBar(label, pct, val, lim, unit){
+  return `<div class="pm-row"><span class="pm-lbl">${label}</span>
+    <div class="pm-track"><div class="pm-fill ${tvLevelOf(pct)}" style="width:${pct}%"></div></div>
+    <span class="pm-val">${pct}% <small>(${val}${unit}${lim?` / ${lim}${unit}`:""})</small></span></div>`;
+}
+const tvStatusClass = s => s==="Running" ? "ok" : (s==="Failed" ? "bad" : "warn");
+
+function tvRender(){
+  const root = document.getElementById("tvRoot");
+  /* ---------- LEVEL 1: tenants ---------- */
+  if (TV.level === 1){
+    const f = TV.filter.toLowerCase();
+    const rows = TV_DATA.map((t,i)=>({t,i})).filter(x => x.t.name.toLowerCase().includes(f));
+    root.innerHTML = `
+      <section class="section">
+        <div class="sec-head">
+          <div class="sec-title"><span class="dot green"></span> Tenants ${tvLevelPill("Tenant View")}</div>
+          <div class="node-tools">
+            <span class="chip ready">${rows.length} Tenant${rows.length===1?"":"s"}</span>
+            <label class="search-box">🔍 <input type="text" id="tvSearch" placeholder="Search tenants…" value="${TV.filter}"></label>
+          </div>
+        </div>
+        <div class="tenant-grid">
+          ${rows.map(({t,i}) => `
+            <div class="tcard accent-${t.health}" onclick="tvGo(2,${i})">
+              <div class="tc-top">
+                <div class="tc-name">
+                  <span class="tc-envdot" style="background:${TV_ENVCOLOR[t.env]}"></span>
+                  <div style="min-width:0">
+                    <div class="tc-mono">${t.name}</div>
+                    <span class="ver-badge"><span class="ver-ic">⬡</span>AI-Next <b>${t.ver}</b></span>
+                  </div>
+                </div>
+                <span class="tc-env ${t.env}">${TV_ENVLABEL[t.env]}</span>
+              </div>
+              <div class="tc-pods">
+                <span class="pods-total">Pods: <b>${t.pods}</b></span>
+                <span class="pods-ok">✓ ${t.healthy} healthy</span>
+                <span class="pods-bad ${t.issues?"":"muted"}">✗ ${t.issues} issues</span>
+              </div>
+            </div>`).join("")}
+        </div>
+      </section>`;
+    const s = document.getElementById("tvSearch");
+    s.addEventListener("input", e => { TV.filter = e.target.value; tvRender();
+      const el=document.getElementById("tvSearch"); el.focus(); el.setSelectionRange(el.value.length,el.value.length); });
+    return;
+  }
+
+  const t = TV_DATA[TV.ti];
+
+  /* ---------- LEVEL 2: SERVICE VIEW ---------- */
+  if (TV.level === 2){
+    root.innerHTML = `
+      <div class="tv-back" onclick="tvGo(1)">← Back to Tenant View</div>
+      <div class="tv-head">
+        <div><span class="tv-title">${t.name}</span>
+          ${tvLevelPill("Service View")}
+          <span class="tc-env ${t.env}" style="margin-left:8px">${TV_ENVLABEL[t.env]}</span>
+          <span class="ver-badge" style="margin-left:8px;margin-top:0"><span class="ver-ic">⬡</span>AI-Next <b>${t.ver}</b></span></div>
+        <span class="chip ${t.issues?'critical':'ready'}">${t.pods} Pods · ${t.healthy}/${t.pods} healthy</span>
+      </div>
+      <div class="svc-grid">
+        ${t.services.map((s,si) => `
+          <div class="svc-card accent-${s.status==='Running'?'healthy':(s.status==='Failed'?'critical':'warning')}" onclick="tvGo(3,null,${si})">
+            <div class="svc-top">
+              <span class="svc-name">${s.name}</span>
+              <span class="svc-badge ${tvStatusClass(s.status)}">${s.status}</span>
+            </div>
+            <div class="svc-counts">
+              Desired: <b>${s.desired}</b> · <span class="ok">Up: ${s.up}</span> · <span class="${s.down?'bad':''}">Down: ${s.down}</span>
+            </div>
+            <div class="svc-rep">Replica <b>${Math.min(2,s.up)}/${s.desired}</b> · <span class="mono">${s.replicas[0].name}</span></div>
+            <div class="pm">
+              ${tvBar("CPU", s.cpuPct, Math.round(s.cpuPct/100*s.cpuLim), s.cpuLim, "m")}
+              ${tvBar("Mem", s.memPct, Math.round(s.memPct/100*s.memLim), s.memLim, "Mi")}
+            </div>
+          </div>`).join("")}
+      </div>`;
+    return;
+  }
+
+  const svc = t.services[TV.si];
+
+  /* ---------- LEVEL 3: POD VIEW ---------- */
+  if (TV.level === 3){
+    root.innerHTML = `
+      <div class="tv-back" onclick="tvGo(2)">← Back to Service View</div>
+      <div class="tv-head">
+        <div><span class="tv-title">${svc.name}</span>
+          ${tvLevelPill("Pod View")}
+          <span class="svc-badge ${tvStatusClass(svc.status)}" style="margin-left:8px">${svc.status}</span></div>
+        <span class="tv-sub">${t.name} · Desired ${svc.desired} · Up ${svc.up} · Down ${svc.down}</span>
+      </div>
+      <div class="rep-grid">
+        ${svc.replicas.map((p,pi) => `
+          <div class="rep-card accent-${p.state==='Running'?'healthy':'critical'}" onclick="tvGo(4,null,null,${pi})">
+            <div class="rep-top">
+              <span class="rep-name"><span class="dot ${p.state==='Running'?'green':'red'}"></span>${p.name}</span>
+              <span class="svc-badge ${tvStatusClass(p.state)}">${p.state}</span>
+            </div>
+            <div class="rep-meta">${p.restarts>0?`<span class="bad">${p.restarts} restarts</span> · `:""}node ntnxclstr19-qtz-${tvSuffix(tvRng(pi+TV.si*7+TV.ti*13))}</div>
+            <div class="pm">
+              ${tvBar("CPU", p.cpuPct, p.cpuVal, svc.cpuLim, "m")}
+              ${tvBar("Mem", p.memPct, p.memVal, svc.memLim, "Mi")}
+            </div>
+            <div class="rep-actions">
+              <span class="rep-open">Open pod →</span>
+              <button class="tv-btn" onclick="event.stopPropagation();tvOpenLogs(${TV.ti},${TV.si},${pi})">View Logs</button>
+            </div>
+          </div>`).join("")}
+      </div>`;
+    return;
+  }
+
+  const pod = svc.replicas[TV.pi];
+
+  /* ---------- LEVEL 4: POD DETAIL (chart + history + logs) ---------- */
+  if (TV.level === 4){
+    const node = "ntnxclstr19-qtz-" + tvSuffix(tvRng(TV.pi+TV.si*7+TV.ti*13));
+    const sub = `${t.name} · ${svc.name} · node ${node}${pod.restarts?` · <span style="color:var(--red)">${pod.restarts} restarts</span>`:""}`;
+    renderPodDetail(root, pod, svc, {
+      backLabel:"Back to Pod View", backOnclick:"tvGo(3)",
+      subHTML:sub, logsOnclick:`openLogsForPod(TV_DATA[${TV.ti}].services[${TV.si}].replicas[${TV.pi}])`
+    });
+    return;
+  }
+}
+
+/* shared pod-detail renderer (used by Tenant View + Cluster Health) */
+function renderPodDetail(root, pod, svc, cfg){
+  root.innerHTML = `
+    <div class="tv-back" onclick="${cfg.backOnclick}">← ${cfg.backLabel}</div>
+    <div class="tv-head">
+      <div><span class="tv-title" style="font-family:var(--mono);font-size:17px">${pod.name}</span>
+        ${tvLevelPill("Pod Detail")}
+        <span class="svc-badge ${tvStatusClass(pod.state)}" style="margin-left:8px">${pod.state}</span></div>
+      <button class="tv-btn" onclick="${cfg.logsOnclick}">View Logs</button>
+    </div>
+    <div class="tv-sub" style="margin:-8px 0 16px;display:block">${cfg.subHTML}</div>
+    <div class="pod-detail-grid">
+      <div class="pod-charts">
+        ${tvChartBox("mc-cpu","CPU — last 60 min","#16b3c4")}
+        ${tvChartBox("mc-mem","Memory — last 60 min","#7c5cff")}
+      </div>
+      <section class="section" style="margin:0">
+        <div class="sec-head">
+          <div class="sec-title"><span class="dot orange"></span> Pod History — last 60 min</div>
+        </div>
+        <div class="pod-history">${tvHistory(pod).map(h => `
+          <div class="ph-row">
+            <span class="ph-time">${h.time}</span>
+            <span class="ph-dot ${h.kind}"></span>
+            <span class="ph-text">${h.text}</span>
+          </div>`).join("")}
+        </div>
+      </section>
+    </div>`;
+  tvSetupPodCharts(pod, svc);
+}
+
+/* ---------- interactive metric charts (CPU / Mem) ---------- */
+const TV_CHARTS = {};
+const TV_CW = 640, TV_CH = 200, TV_PL = 38, TV_PR = 14, TV_PT = 12, TV_PB = 24;
+
+function tvChartBox(id, title, color){
+  return `<section class="section" style="margin:0">
+    <div class="mc-head">
+      <div class="sec-title"><span class="dot" style="background:${color}"></span> ${title}</div>
+      <div class="mc-zoom">
+        <button class="mcz" data-act="out"   data-chart="${id}" title="Zoom out">−</button>
+        <button class="mcz" data-act="in"    data-chart="${id}" title="Zoom in">+</button>
+        <button class="mcz" data-act="reset" data-chart="${id}" title="Reset">⟲</button>
+      </div>
+    </div>
+    <div class="mc-plot" id="${id}">
+      <svg viewBox="0 0 ${TV_CW} ${TV_CH}" class="pod-chart" preserveAspectRatio="none"></svg>
+      <div class="mc-tip"></div>
+      <div class="mc-hint">scroll / drag to zoom &amp; pan · hover for value</div>
+    </div>
+  </section>`;
+}
+
+function tvSeries(pod, svc){
+  const r = tvRng(pod.name.split("").reduce((a,c)=>a+c.charCodeAt(0),0)+5);
+  const n=60, live = pod.state==="Running";
+  const base = Date.UTC(2026,5,14,5,40,0); // now = 06:40 UTC
+  let c = live?pod.cpuPct:6, m = live?pod.memPct:4;
+  const cpu=[], mem=[], times=[];
+  for (let i=0;i<n;i++){
+    c=Math.max(2,Math.min(99,c+(r()-0.5)*14));
+    m=Math.max(2,Math.min(99,m+(r()-0.5)*9));
+    cpu.push(c); mem.push(m); times.push(base + i*60000);
+  }
+  if (live){ cpu[n-1]=pod.cpuPct; mem[n-1]=pod.memPct; }
+  else { for(let i=Math.floor(n*0.6);i<n;i++){cpu[i]=0;mem[i]=0;} }
+  return { times,
+    cpu: cpu.map(p=>({pct:Math.round(p), val:Math.round(p/100*svc.cpuLim)})),
+    mem: mem.map(p=>({pct:Math.round(p), val:Math.round(p/100*svc.memLim)})) };
+}
+
+function tvSetupPodCharts(pod, svc){
+  const s = tvSeries(pod, svc);
+  tvMakeChart("mc-cpu", s.cpu, s.times, "#16b3c4", "m",  svc.cpuLim);
+  tvMakeChart("mc-mem", s.mem, s.times, "#7c5cff", "Mi", svc.memLim);
+  document.querySelectorAll(".mcz").forEach(b => b.onclick = () => {
+    const id=b.dataset.chart, st=TV_CHARTS[id], center=Math.round((st.lo+st.hi)/2);
+    if (b.dataset.act==="in")  tvZoom(id,0.6,center);
+    else if (b.dataset.act==="out") tvZoom(id,1.7,center);
+    else { st.lo=0; st.hi=st.points.length-1; tvDrawChart(id); }
+  });
+}
+
+function tvDrawChart(id){
+  const st = TV_CHARTS[id]; const host = document.getElementById(id); if(!host) return;
+  const svg = host.querySelector("svg");
+  const lo=st.lo, hi=st.hi, vis=Math.max(1,hi-lo);
+  const X = j => TV_PL + (j-lo)/vis*(TV_CW-TV_PL-TV_PR);
+  const Y = v => TV_PT + (1-v/100)*(TV_CH-TV_PT-TV_PB);
+  let d="";
+  for (let i=lo;i<=hi;i++) d += (i===lo?"M":"L") + X(i).toFixed(1) + " " + Y(st.points[i].pct).toFixed(1) + " ";
+  const area = d + `L${X(hi).toFixed(1)} ${Y(0).toFixed(1)} L${X(lo).toFixed(1)} ${Y(0).toFixed(1)} Z`;
+  const grid = [0,25,50,75,100].map(g =>
+    `<line x1="${TV_PL}" x2="${TV_CW-TV_PR}" y1="${Y(g)}" y2="${Y(g)}" class="ch-grid"/>
+     <text x="${TV_PL-7}" y="${Y(g)+3.5}" class="ch-axis">${g}</text>`).join("");
+  let xl=""; const ticks=4;
+  for (let k=0;k<=ticks;k++){ const i=Math.round(lo + k/ticks*vis);
+    const tt=new Date(st.times[i]).toISOString().slice(11,16);
+    xl += `<text x="${X(i)}" y="${TV_CH-7}" class="ch-axis" text-anchor="middle">${tt}</text>`; }
+  svg.innerHTML = `${grid}${xl}
+    <path d="${area}" fill="${st.color}" opacity=".11"/>
+    <path d="${d}" fill="none" stroke="${st.color}" stroke-width="2"/>
+    <line class="mc-cross" x1="0" x2="0" y1="${TV_PT}" y2="${TV_CH-TV_PB}" style="display:none"/>
+    <circle class="mc-pt" r="3.8" fill="${st.color}" stroke="#fff" stroke-width="1.5" style="display:none"/>`;
+}
+
+function tvZoom(id, factor, center){
+  const st=TV_CHARTS[id], n=st.points.length, vis=st.hi-st.lo;
+  let nv=Math.round(vis*factor); nv=Math.max(5,Math.min(n-1,nv));
+  const ratio=(center-st.lo)/(vis||1);
+  let lo=Math.round(center-ratio*nv), hi=lo+nv;
+  if(lo<0){lo=0;hi=nv;} if(hi>n-1){hi=n-1;lo=hi-nv;}
+  st.lo=lo; st.hi=hi; tvDrawChart(id);
+}
+
+function tvMakeChart(id, points, times, color, unit, lim){
+  TV_CHARTS[id] = {points, times, color, unit, lim, lo:0, hi:points.length-1};
+  tvDrawChart(id);
+  const host = document.getElementById(id); if(!host) return;
+  const svg = host.querySelector("svg");
+  const tip = host.querySelector(".mc-tip");
+  const svgX = clientX => { const r=svg.getBoundingClientRect(); return (clientX-r.left)/r.width*TV_CW; };
+  const idxAt = clientX => { const st=TV_CHARTS[id]; let sx=Math.max(TV_PL,Math.min(TV_CW-TV_PR,svgX(clientX)));
+    const vis=st.hi-st.lo; return Math.max(st.lo,Math.min(st.hi,Math.round(st.lo+(sx-TV_PL)/(TV_CW-TV_PL-TV_PR)*vis))); };
+
+  svg.addEventListener("mousemove", e => {
+    const st=TV_CHARTS[id], i=idxAt(e.clientX), p=st.points[i], vis=Math.max(1,st.hi-st.lo);
+    const X=j=>TV_PL+(j-st.lo)/vis*(TV_CW-TV_PL-TV_PR), Y=v=>TV_PT+(1-v/100)*(TV_CH-TV_PT-TV_PB);
+    const cross=svg.querySelector(".mc-cross"), pt=svg.querySelector(".mc-pt");
+    if(cross){cross.setAttribute("x1",X(i));cross.setAttribute("x2",X(i));cross.style.display="";}
+    if(pt){pt.setAttribute("cx",X(i));pt.setAttribute("cy",Y(p.pct));pt.style.display="";}
+    const tt=new Date(st.times[i]).toISOString().slice(11,16);
+    tip.innerHTML=`<b>${tt}</b> · ${p.pct}% <small>(${p.val}${unit} / ${lim}${unit})</small>`;
+    tip.style.display="block";
+    const rect=svg.getBoundingClientRect();
+    const lx=X(i)/TV_CW*rect.width, ly=Y(p.pct)/TV_CH*rect.height;
+    tip.style.left=Math.max(4,Math.min(rect.width-4,lx))+"px";
+    tip.style.top=Math.max(0,ly-10)+"px";
+  });
+  svg.addEventListener("mouseleave", () => {
+    tip.style.display="none";
+    const c=svg.querySelector(".mc-cross"), p=svg.querySelector(".mc-pt");
+    if(c)c.style.display="none"; if(p)p.style.display="none";
+  });
+  svg.addEventListener("wheel", e => { e.preventDefault();
+    tvZoom(id, e.deltaY<0?0.82:1.25, idxAt(e.clientX)); }, {passive:false});
+
+  let drag=false, sx0=0, lo0=0, hi0=0;
+  svg.addEventListener("pointerdown", e => { drag=true; sx0=e.clientX;
+    const st=TV_CHARTS[id]; lo0=st.lo; hi0=st.hi; svg.setPointerCapture(e.pointerId); svg.style.cursor="grabbing"; });
+  svg.addEventListener("pointerup", e => { drag=false; svg.style.cursor="crosshair";
+    try{svg.releasePointerCapture(e.pointerId);}catch(_){} });
+  svg.addEventListener("pointermove", e => {
+    if(!drag) return; const st=TV_CHARTS[id], r=svg.getBoundingClientRect(), vis=hi0-lo0, n=st.points.length;
+    const dIdx=Math.round((e.clientX-sx0)/r.width*TV_CW/((TV_CW-TV_PL-TV_PR)/vis));
+    let lo=lo0-dIdx, hi=hi0-dIdx;
+    if(lo<0){lo=0;hi=vis;} if(hi>n-1){hi=n-1;lo=hi-vis;}
+    st.lo=lo; st.hi=hi; tvDrawChart(id);
+  });
+}
+
+
+/* ---------- pod history (last 60 min) ---------- */
+function tvHistory(pod){
+  const r = tvRng(pod.name.length*131 + 7);
+  const base = Date.UTC(2026,5,14,5,40,0); // 60 min before "now" 06:40
+  const fmt = ms => new Date(ms).toISOString().slice(11,16);
+  const rows = [];
+  let t = base;
+  const add = (mins, kind, text) => { t += mins*60000; rows.push({time:fmt(t), kind, text}); };
+  add(0,  "info", "Scheduled onto node by kube-scheduler");
+  add(0.4,"info", "Pulling image " + pod.name.split("-")[0] + ":" + (pod.name.split("-").pop()));
+  add(0.6,"info", "Successfully pulled image (3.2s)");
+  add(0.2,"info", "Created container");
+  add(0.2,"ok",   "Started container — entered Running");
+  add(6,  "info", "Readiness probe succeeded");
+  add(9,  "info", "Liveness probe succeeded · metrics scraped");
+  if (pod.state === "Running"){
+    if (r() > 0.5) add(11,"warn","CPU throttled briefly (limit approached)");
+    add(13,"ok",  "Health check passed · " + (pod.memPct>80?"memory high":"steady"));
+    add(10,"info","gRPC stream keepalive · connections " + (8+Math.floor(r()*40)));
+    add(8, "ok",  "Running — no restarts in window");
+  } else {
+    add(12,"error","Liveness probe failed: HTTP 500");
+    add(1, "error","Container exited (code 137) — OOMKilled");
+    add(0.5,"warn","Back-off restarting failed container");
+    add(2, "error","CrashLoopBackOff — " + pod.restarts + " restarts");
+    add(9, "warn","Awaiting healthy probe · still Down");
+  }
+  return rows.reverse(); // newest first
+}
+
+/* ---------- logs modal ---------- */
+let LOG_STATE = { pod:null, lines:[], tf:"all" };
+
+function openLogsForPod(pod){
+  LOG_STATE.pod = pod;
+  LOG_STATE.lines = tvLogs(pod);   // ascending by time, spans last 60 min
+  LOG_STATE.tf = "all";
+  const sel = document.getElementById("lmTf"); if (sel) sel.value = "all";
+  document.getElementById("lmTitle").textContent = "Logs — " + pod.name;
+  renderLogBody();
+  document.getElementById("logsModal").classList.add("open");
+}
+function logCutoff(){
+  if (LOG_STATE.tf === "all") return -Infinity;
+  const last = LOG_STATE.lines.length ? LOG_STATE.lines[LOG_STATE.lines.length-1].tsMs : 0;
+  return last - parseInt(LOG_STATE.tf,10)*60000;
+}
+function filteredLogs(){ const c = logCutoff(); return LOG_STATE.lines.filter(l => l.tsMs >= c); }
+function renderLogBody(){
+  const rows = filteredLogs();
+  const body = rows.map(l => `<div class="log-line"><span class="log-ts">${l.ts}</span> <span class="log-lvl ${l.lvl.toLowerCase()}">${l.lvl.padEnd(5)}</span> <span class="log-pod">${l.pod}</span> <span class="log-msg">${l.msg}</span></div>`).join("");
+  const b = document.getElementById("lmBody");
+  b.innerHTML = body + `<div class="log-line"><span class="log-cursor">▋</span></div>`;
+  const sub = document.getElementById("lmSub");
+  if (sub) sub.textContent = `${rows.length} lines · ${LOG_STATE.tf==="all" ? "full 60-min window" : ("last "+LOG_STATE.tf+" min")}`;
+  b.scrollTop = b.scrollHeight;
+}
+function changeLogTf(v){ LOG_STATE.tf = v; renderLogBody(); }
+function downloadLogs(){
+  if (!LOG_STATE.pod) return;
+  const rows = filteredLogs();
+  const text = rows.map(l => `${l.ts}  ${l.lvl.padEnd(5)}  ${l.pod}  ${l.msg}`).join("\n");
+  const blob = new Blob([text], {type:"text/plain"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const tf = LOG_STATE.tf === "all" ? "60min" : (LOG_STATE.tf + "min");
+  a.href = url; a.download = `${LOG_STATE.pod.name}-logs-last-${tf}.log`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function toggleLogMax(){
+  const w = document.getElementById("logsWindow");
+  w.classList.toggle("maximized");
+  document.getElementById("lmMax").textContent = w.classList.contains("maximized") ? "🗗" : "⛶";
+}
+function tvOpenLogs(ti, si, pi){ openLogsForPod(TV_DATA[ti].services[si].replicas[pi]); }
+function tvCloseLogs(){ document.getElementById("logsModal").classList.remove("open"); }
+
+/* ====================================================================
+   CLUSTER HEALTH — drill-down: Nodes → Pods on node → Pod detail
+   ==================================================================== */
+function meterClass(p){ return p >= 60 ? "hot" : p >= 50 ? "warm" : ""; }
+
+/* services that can run on a node: [name, cpuLim(m), memLim(Mi)] */
+const CH_SVCS = [
+  ["vault",600,1024],["vault-api",600,1280],["valkey",400,768],["nfs",400,1024],
+  ["kafka",600,1536],["home-frontend",600,768],["superset",600,1024],["nifi",600,1536],
+  ["user-service",600,1024],["iam",600,1024],["data-orch",600,1280],["neural-conn",600,1024],
+];
+const CH_NS = TV_TENANTS.map(t => t.name); // tenant namespaces
+
+/* build pods for each node deterministically */
+const CH_DATA = nodes.map(([name,cpu,mem,podCount,st], ni) => {
+  const r = tvRng(name.split("").reduce((a,c)=>a+c.charCodeAt(0),0) + ni*17 + 3);
+  const pods = [];
+  for (let i=0;i<podCount;i++){
+    const svc = CH_SVCS[Math.floor(r()*CH_SVCS.length)];
+    const ns  = CH_NS[Math.floor(r()*CH_NS.length)];
+    const roll = r();
+    const bad = roll > (st==="warn" ? 0.84 : 0.93);
+    const state = bad ? (r()>0.5 ? "CrashLoopBackOff" : "Failed") : "Running";
+    const cpuPct = state==="Running" ? Math.round(8 + r()*82) : 0;
+    const memPct = state==="Running" ? Math.round(12 + r()*78) : 0;
+    pods.push({
+      name: `${svc[0]}-${tvSuffix(r)}`, ns, state,
+      cpuPct, memPct, cpuLim:svc[1], memLim:svc[2],
+      cpuVal: Math.round(cpuPct/100*svc[1]), memVal: Math.round(memPct/100*svc[2]),
+      restarts: state==="Running" ? 0 : Math.floor(2 + r()*9),
+    });
+  }
+  const running = pods.filter(p=>p.state==="Running").length;
+  return {name, cpu, mem, podCount, st, pods, running, down:podCount-running};
+});
+
+/* ---------- navigation ---------- */
+let CH = { level:1, ni:null, pi:null, filter:"" };
+function chGo(level, ni, pi){ CH.level=level; if(ni!=null)CH.ni=ni; if(pi!=null)CH.pi=pi; chRender(); }
+function chReset(){ CH={level:1, ni:null, pi:null, filter:""}; }
+function chOpenLogs(ni, pi){ openLogsForPod(CH_DATA[ni].pods[pi]); }
+
+function chRender(){
+  const root = document.getElementById("chRoot");
+  const readyCount = CH_DATA.filter(n=>n.st!=="warn").length;
+
+  /* LEVEL 1: nodes */
+  if (CH.level === 1){
+    const f = CH.filter.toLowerCase();
+    const rows = CH_DATA.map((n,i)=>({n,i})).filter(x=>x.n.name.toLowerCase().includes(f));
+    root.innerHTML = `
+      <section class="section">
+        <div class="sec-head">
+          <div class="sec-title"><span class="dot green"></span> Node Overview ${tvLevelPill("Node View")}</div>
+          <div class="node-tools">
+            <span class="chip ${CH_DATA.length-readyCount?'critical':'ready'}">${readyCount} / ${CH_DATA.length} Ready</span>
+            <label class="search-box">🔍 <input type="text" id="chSearch" placeholder="Search nodes…" value="${CH.filter}"></label>
+          </div>
+        </div>
+        <div class="node-grid">
+          ${rows.map(({n,i}) => `
+            <div class="node" onclick="chGo(2,${i})">
+              <div class="n-top">
+                <span class="n-name"><span class="dot ${n.st==="warn"?"orange":"green"}"></span>${n.name}</span>
+                <span class="nbadge ${n.st}">${n.st==="warn"?"Warn":"Ready"}</span>
+              </div>
+              <div class="meter">
+                <div class="m-line"><span>CPU</span><span class="pv">${n.cpu}%</span></div>
+                <div class="m-bar"><div class="m-fill ${meterClass(n.cpu)}" style="width:${n.cpu}%"></div></div>
+              </div>
+              <div class="meter">
+                <div class="m-line"><span>Memory</span><span class="pv">${n.mem}%</span></div>
+                <div class="m-bar"><div class="m-fill ${meterClass(n.mem)}" style="width:${n.mem}%"></div></div>
+              </div>
+              <div class="n-pods">⛁ Pods: <b>${n.podCount}</b>${n.down?` · <span style="color:var(--red)">${n.down} down</span>`:` · <span style="color:var(--green)">all running</span>`}</div>
+            </div>`).join("")}
+        </div>
+      </section>`;
+    const s = document.getElementById("chSearch");
+    s.addEventListener("input", e => { CH.filter=e.target.value; chRender();
+      const el=document.getElementById("chSearch"); el.focus(); el.setSelectionRange(el.value.length,el.value.length); });
+    return;
+  }
+
+  const node = CH_DATA[CH.ni];
+
+  /* LEVEL 2: pods on node */
+  if (CH.level === 2){
+    root.innerHTML = `
+      <div class="tv-back" onclick="chGo(1)">← Back to Node View</div>
+      <div class="tv-head">
+        <div><span class="tv-title" style="font-family:var(--mono);font-size:16px">${node.name}</span>
+          ${tvLevelPill("Pod View")}
+          <span class="nbadge ${node.st}" style="margin-left:8px">${node.st==="warn"?"Warn":"Ready"}</span></div>
+        <span class="chip ${node.down?'critical':'ready'}">${node.podCount} Pods · ${node.running} running${node.down?` · ${node.down} down`:""}</span>
+      </div>
+      <div class="tv-sub" style="margin:-8px 0 16px;display:block">Node CPU ${node.cpu}% · Memory ${node.mem}%</div>
+      <div class="rep-grid">
+        ${node.pods.map((p,pi) => `
+          <div class="rep-card accent-${p.state==='Running'?'healthy':'critical'}" onclick="chGo(3,null,${pi})">
+            <div class="rep-top">
+              <span class="rep-name"><span class="dot ${p.state==='Running'?'green':'red'}"></span>${p.name}</span>
+              <span class="svc-badge ${tvStatusClass(p.state)}">${p.state}</span>
+            </div>
+            <div class="rep-meta"><span class="ns-badge">${p.ns}</span>${p.restarts>0?` · <span class="bad">${p.restarts} restarts</span>`:""}</div>
+            <div class="pm">
+              ${tvBar("CPU", p.cpuPct, p.cpuVal, p.cpuLim, "m")}
+              ${tvBar("Mem", p.memPct, p.memVal, p.memLim, "Mi")}
+            </div>
+            <div class="rep-actions">
+              <span class="rep-open">Open pod →</span>
+              <button class="tv-btn" onclick="event.stopPropagation();chOpenLogs(${CH.ni},${pi})">View Logs</button>
+            </div>
+          </div>`).join("")}
+      </div>`;
+    return;
+  }
+
+  /* LEVEL 3: pod detail (shared) */
+  if (CH.level === 3){
+    const pod = node.pods[CH.pi];
+    const sub = `${node.name} · namespace ${pod.ns}${pod.restarts?` · <span style="color:var(--red)">${pod.restarts} restarts</span>`:""}`;
+    renderPodDetail(root, pod, {cpuLim:pod.cpuLim, memLim:pod.memLim}, {
+      backLabel:"Back to Pod View", backOnclick:"chGo(2)",
+      subHTML:sub, logsOnclick:`chOpenLogs(${CH.ni},${CH.pi})`
+    });
+    return;
+  }
+}
+
+
+/* ====================================================================
+   CONFIGURATION — User Creation · Rule Configuration · Monitored Apps
+   ==================================================================== */
+const CFG_APPS = ["Foundation","Fabric","CT","DO","DW","Engage","Neural Connect","Doc AI"];
+const CFG_APPS_DEFAULT = ["Foundation"];   // selected by default
+const CFG_ROLES = ["Admin","Operator","Viewer"];
+const DEFAULT_RULES_YAML =
+`groups:
+  - name: tenant-default-alerts
+    rules:
+      - alert: PodCrashLooping
+        expr: rate(kube_pod_container_status_restarts_total[5m]) > 0
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "Pod {{ $labels.pod }} is crash looping"
+
+      - alert: HighMemoryUsage
+        expr: container_memory_usage / container_memory_limit > 0.85
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Memory above 85% on {{ $labels.pod }}"
+
+      - alert: HighCpuUsage
+        expr: rate(container_cpu_usage_seconds_total[5m]) > 0.90
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "CPU above 90% on {{ $labels.pod }}"
+
+      - alert: FileStorageThreshold
+        expr: file_storage_used_ratio > 0.90
+        for: 15m
+        labels: { severity: critical }
+        annotations:
+          summary: "File storage above 90% capacity"`;
+
+const CFG_USERS = [];
+const CFG_TENANT_RULES = {};   // tenant -> yaml
+const CFG_TENANT_APPS  = {};   // tenant -> [apps]
+let CFG = { tab:"users" };
+
+function cfgEsc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function cfgVal(id){ const e=document.getElementById(id); return e?e.value:""; }
+
+/* ---------- YAML syntax highlighter (overlay editor) ---------- */
+function yamlEsc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function yamlHlValue(v){
+  if(v==="") return "";
+  if(/^["'].*["']$/.test(v)) return `<span class="y-str">${yamlEsc(v)}</span>`;
+  if(/^\{.*\}$/.test(v))
+    return yamlEsc(v).replace(/([A-Za-z0-9_\-]+)(\s*:\s*)([A-Za-z0-9_.\-]+)/g,
+      '<span class="y-key">$1</span>$2<span class="y-bool">$3</span>');
+  if(/^-?\d+(\.\d+)?$/.test(v)) return `<span class="y-num">${yamlEsc(v)}</span>`;
+  if(/^(true|false|null|yes|no)$/i.test(v)) return `<span class="y-bool">${yamlEsc(v)}</span>`;
+  return `<span class="y-val">${yamlEsc(v)}</span>`;
+}
+function yamlHighlight(src){
+  return (src||"").split("\n").map(raw => {
+    // detect comment start (# not inside quotes)
+    let inS=false,inD=false,ci=-1;
+    for(let i=0;i<raw.length;i++){ const c=raw[i];
+      if(c==='"'&&!inS)inD=!inD; else if(c==="'"&&!inD)inS=!inS;
+      else if(c==='#'&&!inS&&!inD){ci=i;break;} }
+    let code=raw, comment="";
+    if(ci>=0){ code=raw.slice(0,ci); comment=raw.slice(ci); }
+    const m=code.match(/^(\s*)(- )?(.*)$/);
+    const indent=m[1]||"", dash=m[2]||"", rest=m[3]||"";
+    let html=indent + (dash?'<span class="y-punc">- </span>':"");
+    const kv=rest.match(/^([A-Za-z0-9_.\-]+)(:)(\s*)(.*)$/);
+    if(kv) html += `<span class="y-key">${yamlEsc(kv[1])}</span><span class="y-punc">:</span>${kv[3]}` + yamlHlValue(kv[4]);
+    else   html += yamlHlValue(rest);
+    if(comment) html += `<span class="y-comment">${yamlEsc(comment)}</span>`;
+    return html || "&nbsp;";
+  }).join("\n");
+}
+function yamlRefresh(id){
+  const ta=document.getElementById(id), hl=document.getElementById(id+"HL");
+  if(!ta||!hl) return;
+  hl.innerHTML=yamlHighlight(ta.value);
+  hl.scrollTop=ta.scrollTop; hl.scrollLeft=ta.scrollLeft;
+}
+function attachYamlEditor(id){
+  const ta=document.getElementById(id), hl=document.getElementById(id+"HL");
+  if(!ta||!hl) return;
+  ta.addEventListener("input", ()=>yamlRefresh(id));
+  ta.addEventListener("scroll", ()=>{ hl.scrollTop=ta.scrollTop; hl.scrollLeft=ta.scrollLeft; });
+  yamlRefresh(id);
+}
+
+/* ---------- lightweight YAML validator ---------- */
+function yamlStripComment(line){
+  let inS=false,inD=false;
+  for(let i=0;i<line.length;i++){ const c=line[i];
+    if(c==='"'&&!inS)inD=!inD; else if(c==="'"&&!inD)inS=!inS;
+    else if(c==='#'&&!inS&&!inD) return line.slice(0,i); }
+  return line;
+}
+function validateYaml(text){
+  const lines=(text||"").split("\n");
+  let braces=0, brackets=0, parens=0;
+  for(let i=0;i<lines.length;i++){
+    const raw=lines[i], ln=i+1;
+    const indent=(raw.match(/^[ \t]*/)||[""])[0];
+    if(indent.includes("\t")) return {ok:false,line:ln,msg:"tabs not allowed for indentation, use spaces"};
+    const code=yamlStripComment(raw);
+    if(code.trim()==="") continue;
+    // double-quote balance (ignore escaped \")
+    const dq=(code.match(/(?<!\\)"/g)||[]).length;
+    if(dq%2!==0) return {ok:false,line:ln,msg:"unbalanced double quote"};
+    // strip quoted strings before bracket/colon checks
+    const bare=code.replace(/"(\\.|[^"\\])*"/g,'""').replace(/'(\\.|[^'\\])*'/g,"''");
+    for(const ch of bare){
+      if(ch==='{')braces++; else if(ch==='}'){ if(--braces<0) return {ok:false,line:ln,msg:"unexpected '}'"}; }
+      else if(ch==='[')brackets++; else if(ch===']'){ if(--brackets<0) return {ok:false,line:ln,msg:"unexpected ']'"}; }
+      else if(ch==='(')parens++; else if(ch===')'){ if(--parens<0) return {ok:false,line:ln,msg:"unexpected ')'"}; }
+    }
+    // mapping key needs a space after colon: key:value is invalid
+    const m=bare.match(/^(\s*)(- )?([^:\s][^:]*?):([^\s/])/);
+    if(m) return {ok:false,line:ln,msg:"missing space after ':' (use 'key: value')"};
+  }
+  if(braces!==0)   return {ok:false,line:lines.length,msg:"unbalanced { } braces"};
+  if(brackets!==0) return {ok:false,line:lines.length,msg:"unbalanced [ ] brackets"};
+  if(parens!==0)   return {ok:false,line:lines.length,msg:"unbalanced ( ) parentheses"};
+  return {ok:true};
+}
+function updateYamlStatus(id){
+  const st=document.getElementById(id+"Status"); if(!st) return;
+  const ta=document.getElementById(id); if(!ta) return;
+  if(ta.value.trim()===""){ st.className="yaml-status"; st.textContent=""; return; }
+  const r=validateYaml(ta.value);
+  if(r.ok){ st.className="yaml-status ok"; st.textContent="✓ Valid YAML"; }
+  else { st.className="yaml-status err"; st.textContent=`✗ Line ${r.line}: ${r.msg}`; }
+}
+
+function cfgReset(){ CFG={tab:"users"}; }
+function cfgTab(t){ CFG.tab=t; cfgRender(); }
+
+function cfgRender(){
+  const root=document.getElementById("cfgRoot"); if(!root) return;
+  root.innerHTML=`<div id="cfgBody"></div>`;
+  const b=document.getElementById("cfgBody");
+  if(CFG.tab==="users"){ b.innerHTML=cfgUsersHTML(); cfgRenderUserList(); attachYamlEditor("ruleEditor"); }
+  else { b.innerHTML=cfgRulesHTML(); attachYamlEditor("rEditor"); }
+}
+function cfgToggleFold(id){ document.getElementById(id).classList.toggle("open"); }
+
+/* ---------- Tab 1: Tenant User Creation ---------- */
+function cfgUsersHTML(){
+  return `
+  <div class="cfg-grid">
+    <section class="section" style="margin:0">
+      <div class="cfg-head">Onboard Tenant user</div>
+
+      <div class="form-row">
+        <label class="fl">Tenant</label>
+        <select id="uTenant" class="fin">${TV_TENANTS.map(t=>`<option>${t.name}</option>`).join("")}</select>
+      </div>
+      <div class="form-row two">
+        <div><label class="fl">Full name</label><input id="uName" class="fin" placeholder="Jane Doe"></div>
+        <div><label class="fl">Email</label><input id="uEmail" class="fin" placeholder="jane.doe@abc.com"></div>
+      </div>
+      <div class="form-row">
+        <label class="fl">Role</label>
+        <select id="uRole" class="fin">${CFG_ROLES.map(r=>`<option>${r}</option>`).join("")}</select>
+      </div>
+
+      <div class="form-row">
+        <div class="cfg-head">Capabilities to be monitored</div>
+        <div class="app-check-grid">
+          ${CFG_APPS.map(a=>`<label class="app-check"><input type="checkbox" class="uApp" value="${a}" ${CFG_APPS_DEFAULT.includes(a)?"checked":""}><span>${a}</span></label>`).join("")}
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="cfg-head">Alert rules</div>
+        <label class="def-check"><input type="checkbox" id="uDefault" checked onchange="cfgToggleDefault()">
+          Use default alert rules</label>
+        <button class="link-btn" id="previewBtn" onclick="cfgTogglePreview()">Show preview</button>
+        <pre class="yaml-box readonly" id="yamlPreview" style="display:none">${yamlHighlight(DEFAULT_RULES_YAML)}</pre>
+        <div id="customWrap" style="display:none">
+          <div class="editor-label">Custom alert rules (YAML) — copied from default, edit &amp; save</div>
+          <div class="yaml-edit">
+            <pre class="yaml-hl" id="ruleEditorHL" aria-hidden="true"></pre>
+            <textarea id="ruleEditor" class="code-input" spellcheck="false" wrap="off"></textarea>
+          </div>
+          <div class="yaml-status" id="ruleEditorStatus"></div>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn-primary" onclick="cfgSaveUser()">Save User</button>
+        <span class="cfg-msg" id="userMsg"></span>
+      </div>
+    </section>
+
+    <section class="section" style="margin:0">
+      <div class="sec-title" style="margin-bottom:14px">Created Users <span class="chip ready" id="userCount">0</span></div>
+      <div id="userList" class="user-list"></div>
+    </section>
+  </div>`;
+}
+function cfgAllApps(on){ document.querySelectorAll(".uApp").forEach(c=>c.checked=on); }
+function cfgToggleDefault(){
+  const def=document.getElementById("uDefault").checked;
+  const wrap=document.getElementById("customWrap");
+  const ta=document.getElementById("ruleEditor");
+  if(def){ wrap.style.display="none"; }
+  else { wrap.style.display="block"; if(!ta.value.trim()) ta.value=DEFAULT_RULES_YAML; yamlRefresh("ruleEditor"); const s=document.getElementById("ruleEditorStatus"); if(s){s.className="yaml-status";s.textContent="";} }
+}
+function cfgTogglePreview(){
+  const p=document.getElementById("yamlPreview"), btn=document.getElementById("previewBtn");
+  const show=p.style.display==="none"; p.style.display=show?"block":"none";
+  btn.textContent=show?"Hide preview":"Show preview";
+}
+function cfgSaveUser(){
+  const tenant=cfgVal("uTenant"), name=cfgVal("uName").trim(), email=cfgVal("uEmail").trim(), role=cfgVal("uRole");
+  const apps=[...document.querySelectorAll(".uApp:checked")].map(c=>c.value);
+  const useDef=document.getElementById("uDefault").checked;
+  const custom=!useDef ? (document.getElementById("ruleEditor").value.trim()) : "";
+  const msg=document.getElementById("userMsg");
+  if(!name||!email){ msg.textContent="Enter name and email."; msg.className="cfg-msg err"; return; }
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ msg.textContent="Enter a valid email."; msg.className="cfg-msg err"; return; }
+  if(!apps.length){ msg.textContent="Select at least one application."; msg.className="cfg-msg err"; return; }
+  if(!useDef){ const vr=validateYaml(custom); updateYamlStatus("ruleEditor"); if(!vr.ok){ msg.textContent=`Invalid YAML — line ${vr.line}: ${vr.msg}`; msg.className="cfg-msg err"; return; } }
+  CFG_USERS.unshift({tenant,name,email,role,apps,rules: useDef?"default":(custom||"default"),custom:!useDef});
+  msg.textContent="User created ✓"; msg.className="cfg-msg ok";
+  document.getElementById("uName").value=""; document.getElementById("uEmail").value="";
+  cfgRenderUserList();
+}
+function cfgRenderUserList(){
+  const wrap=document.getElementById("userList"); if(!wrap) return;
+  document.getElementById("userCount").textContent=CFG_USERS.length;
+  if(!CFG_USERS.length){ wrap.innerHTML=`<div class="cfg-empty">No users yet. Create one on the left.</div>`; return; }
+  wrap.innerHTML=CFG_USERS.map(u=>`
+    <div class="user-card">
+      <div class="uc-top">
+        <span class="uc-name">${u.name}</span>
+        <span class="uc-role ${u.role.toLowerCase()}">${u.role}</span>
+      </div>
+      <div class="uc-meta">${u.email} · <b>${u.tenant}</b></div>
+      <div class="uc-tags">
+        <span class="uc-tag">${u.apps.length} app${u.apps.length===1?"":"s"} monitored</span>
+        <span class="uc-tag ${u.custom?"custom":"default"}">${u.custom?"Custom rules":"Default rules"}</span>
+      </div>
+    </div>`).join("");
+}
+
+/* ---------- Tab 2: Tenant Rule Configuration ---------- */
+function cfgRulesHTML(){
+  const tn=TV_TENANTS[0].name;
+  const cur=CFG_TENANT_RULES[tn]||DEFAULT_RULES_YAML;
+  return `
+  <section class="section" style="margin:0">
+    <div class="sec-title" style="margin-bottom:16px">Tenant-specific Alert Rules</div>
+    <div class="form-row two">
+      <div><label class="fl">Tenant</label>
+        <select id="rTenant" class="fin" onchange="cfgRuleLoad()">${TV_TENANTS.map(t=>`<option>${t.name}</option>`).join("")}</select></div>
+      <div><label class="fl">Status</label><div class="fin static" id="rStatus">${CFG_TENANT_RULES[tn]?"Custom rules saved":"Using default rules"}</div></div>
+    </div>
+    <div class="form-row">
+      <label class="fl">Rules (YAML)</label>
+      <div class="cfg-tools"><button class="link-btn" onclick="cfgRuleReset()">Reset to default</button></div>
+      <div class="yaml-edit tall">
+        <pre class="yaml-hl" id="rEditorHL" aria-hidden="true"></pre>
+        <textarea id="rEditor" class="code-input" spellcheck="false" wrap="off">${cfgEsc(cur)}</textarea>
+      </div>
+      <div class="yaml-status" id="rEditorStatus"></div>
+    </div>
+    <div class="form-actions">
+      <button class="btn-primary" onclick="cfgRuleSave()">Save Rules</button>
+      <span class="cfg-msg" id="ruleMsg"></span>
+    </div>
+  </section>`;
+}
+function cfgRuleLoad(){
+  const tn=cfgVal("rTenant");
+  document.getElementById("rEditor").value=CFG_TENANT_RULES[tn]||DEFAULT_RULES_YAML;
+  document.getElementById("rStatus").textContent=CFG_TENANT_RULES[tn]?"Custom rules saved":"Using default rules";
+  document.getElementById("ruleMsg").textContent=""; yamlRefresh("rEditor");
+  const s=document.getElementById("rEditorStatus"); if(s){s.className="yaml-status";s.textContent="";}
+}
+function cfgRuleReset(){ document.getElementById("rEditor").value=DEFAULT_RULES_YAML; yamlRefresh("rEditor");
+  const s=document.getElementById("rEditorStatus"); if(s){s.className="yaml-status";s.textContent="";} }
+function cfgRuleSave(){
+  const tn=cfgVal("rTenant"), y=document.getElementById("rEditor").value.trim();
+  const msg=document.getElementById("ruleMsg");
+  if(!y){ msg.textContent="Rules cannot be empty."; msg.className="cfg-msg err"; return; }
+  updateYamlStatus("rEditor");
+  const vr=validateYaml(y);
+  if(!vr.ok){ msg.textContent=`Invalid YAML — line ${vr.line}: ${vr.msg}`; msg.className="cfg-msg err"; return; }
+  if(y===DEFAULT_RULES_YAML){ delete CFG_TENANT_RULES[tn]; document.getElementById("rStatus").textContent="Using default rules"; }
+  else { CFG_TENANT_RULES[tn]=y; document.getElementById("rStatus").textContent="Custom rules saved"; }
+  msg.textContent="Saved ✓"; msg.className="cfg-msg ok";
+}
+
+/* ---------- Tab 3: Applications to Monitor ---------- */
+function cfgAppsHTML(){
+  const tn=TV_TENANTS[0].name;
+  const sel=CFG_TENANT_APPS[tn]||CFG_APPS_DEFAULT.slice();
+  return `
+  <section class="section" style="margin:0">
+    <div class="sec-title" style="margin-bottom:16px">Applications Monitored per Tenant</div>
+    <div class="form-row">
+      <label class="fl">Tenant</label>
+      <select id="aTenant" class="fin" onchange="cfgAppsLoad()">${TV_TENANTS.map(t=>`<option>${t.name}</option>`).join("")}</select>
+    </div>
+    <div class="form-row">
+      <label class="fl">Applications</label>
+      <div class="cfg-tools">
+        <button class="link-btn" onclick="cfgAppsAll(true)">Select all</button>
+        <button class="link-btn" onclick="cfgAppsAll(false)">Clear</button>
+      </div>
+      <div class="app-check-grid" id="aGrid">
+        ${CFG_APPS.map(a=>`<label class="app-check"><input type="checkbox" class="aApp" value="${a}" ${sel.includes(a)?"checked":""}><span>${a}</span></label>`).join("")}
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn-primary" onclick="cfgAppsSave()">Save</button>
+      <span class="cfg-msg" id="appMsg"></span>
+    </div>
+  </section>`;
+}
+function cfgAppsLoad(){
+  const tn=cfgVal("aTenant"); const sel=CFG_TENANT_APPS[tn]||CFG_APPS_DEFAULT.slice();
+  document.querySelectorAll(".aApp").forEach(c=>c.checked=sel.includes(c.value));
+  document.getElementById("appMsg").textContent="";
+}
+function cfgAppsAll(on){ document.querySelectorAll(".aApp").forEach(c=>c.checked=on); }
+function cfgAppsSave(){
+  const tn=cfgVal("aTenant"); const apps=[...document.querySelectorAll(".aApp:checked")].map(c=>c.value);
+  const msg=document.getElementById("appMsg");
+  if(!apps.length){ msg.textContent="Select at least one application."; msg.className="cfg-msg err"; return; }
+  CFG_TENANT_APPS[tn]=apps;
+  msg.textContent=`Saved ✓ — ${apps.length} app${apps.length===1?"":"s"} monitored for ${tn}`; msg.className="cfg-msg ok";
+}
+
+
+const pageTitles = {
+  dashboard:"Cluster Overview", cluster:"Cluster Health", nfs:"File Storage",
+  tenant:"Tenant View", neural:"Neural Connect",
+  "app-nifi":"Nifi", "app-superset":"Superset", "app-do":"DO", "app-dw":"DW", "app-engage":"Engage",
+  synthetic:"Synthetic", threshold:"Service Threshold",
+  "active-alerts":"Active Alerts", config:"Configuration"
+};
+const crumbs = {
+  dashboard:"Overview", cluster:"Cluster Health", nfs:"File Storage",
+  tenant:"Tenant View", neural:"Neural Connect",
+  "app-nifi":"Fabric / Nifi", "app-superset":"CT / Superset",
+  "app-do":"Workflow / DO", "app-dw":"Workflow / DW", "app-engage":"Workflow / Engage",
+  synthetic:"Synthetic", threshold:"Service Threshold",
+  "active-alerts":"Active Alerts", config:"Configuration"
+};
+function goTo(page){
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  const el = document.getElementById("page-" + page);
+  if (el) el.classList.add("active");
+  document.querySelectorAll(".nav-item").forEach(n =>
+    n.classList.toggle("active", n.dataset.page === page));
+  document.getElementById("pageTitle").textContent = pageTitles[page] || page;
+  document.getElementById("crumb").textContent = crumbs[page] || page;
+  document.querySelector(".res-pills").style.display = (page === "dashboard") ? "flex" : "none";
+  if (page === "tenant"){ tvResetView(); tvRender(); }
+  if (page === "cluster"){ chReset(); chRender(); }
+  if (page === "config"){ cfgReset(); cfgRender(); }
+}
+document.querySelectorAll(".nav-item").forEach(n =>
+  n.addEventListener("click", () => {
+    if (n.dataset.cfgtab){
+      goTo("config");
+      CFG.tab = n.dataset.cfgtab; cfgRender();
+      document.querySelectorAll('.nav-item[data-page="config"]').forEach(x => x.classList.remove("active"));
+      n.classList.add("active");
+    } else {
+      goTo(n.dataset.page);
+    }
+  }));
+document.querySelectorAll("[data-goto]").forEach(l =>
+  l.addEventListener("click", () => goTo(l.dataset.goto)));
+
+/* ---------- cluster dropdown ---------- */
+const clusterBtn  = document.getElementById("clusterBtn");
+const clusterMenu = document.getElementById("clusterMenu");
+clusterBtn.addEventListener("click", e => { e.stopPropagation(); clusterMenu.classList.toggle("open"); });
+document.querySelectorAll(".cl-opt").forEach(o =>
+  o.addEventListener("click", e => {
+    e.stopPropagation();
+    document.querySelectorAll(".cl-opt").forEach(x => x.classList.remove("active"));
+    o.classList.add("active");
+    document.getElementById("clusterName").textContent = o.dataset.cluster;
+    document.getElementById("subCluster").textContent = o.dataset.cluster;
+    document.getElementById("crumbCluster").textContent = o.dataset.cluster;
+    const dot = document.querySelector("#clusterBtn > .dot");
+    dot.className = "dot " + (o.dataset.dot || "green");
+    clusterMenu.classList.remove("open");
+  }));
+
+/* ---------- sidebar collapse ---------- */
+document.getElementById("sidebarToggle").addEventListener("click", () =>
+  document.getElementById("sidebar").classList.toggle("collapsed"));
+
+/* ---------- expandable nav groups (Application Metrics) ---------- */
+function toggleNavGroup(el){
+  const sb=document.getElementById("sidebar");
+  if(sb.classList.contains("collapsed")) sb.classList.remove("collapsed");
+  el.parentElement.classList.toggle("open");
+}
+
+/* ---------- dropdowns ---------- */
+const moduleSwitch = document.getElementById("moduleSwitch");
+const moduleMenu   = document.getElementById("moduleMenu");
+const userBtn      = document.getElementById("userBtn");
+const userMenu     = document.getElementById("userMenu");
+
+moduleSwitch.addEventListener("click", e => {
+  e.stopPropagation();
+  userMenu.classList.remove("open");
+  moduleMenu.classList.toggle("open");
+});
+userBtn.addEventListener("click", e => {
+  e.stopPropagation();
+  moduleMenu.classList.remove("open");
+  userMenu.classList.toggle("open");
+});
+document.addEventListener("click", () => {
+  moduleMenu.classList.remove("open");
+  userMenu.classList.remove("open");
+  clusterMenu.classList.remove("open");
+});
+
+/* ---------- theme toggle ---------- */
+const lightBtn = document.getElementById("lightBtn");
+const darkBtn  = document.getElementById("darkBtn");
+lightBtn.addEventListener("click", e => { e.stopPropagation();
+  document.body.classList.remove("dark"); lightBtn.classList.add("active"); darkBtn.classList.remove("active"); });
+darkBtn.addEventListener("click", e => { e.stopPropagation();
+  document.body.classList.add("dark"); darkBtn.classList.add("active"); lightBtn.classList.remove("active"); });
+</script>
+</body>
+</html>
